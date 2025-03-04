@@ -20,13 +20,13 @@ namespace saba
 
 	MMDPhysicsManager::~MMDPhysicsManager()
 	{
-		for (auto& joint : m_joints)
+		for (auto &joint : m_joints)
 		{
 			m_mmdPhysics->RemoveJoint(joint.get());
 		}
 		m_joints.clear();
 
-		for (auto& rb : m_rigidBodys)
+		for (auto &rb : m_rigidBodys)
 		{
 			m_mmdPhysics->RemoveRigidBody(rb.get());
 		}
@@ -41,12 +41,12 @@ namespace saba
 		return m_mmdPhysics->Create();
 	}
 
-	MMDPhysics* MMDPhysicsManager::GetMMDPhysics()
+	MMDPhysics *MMDPhysicsManager::GetMMDPhysics()
 	{
 		return m_mmdPhysics.get();
 	}
 
-	MMDRigidBody* MMDPhysicsManager::AddRigidBody()
+	MMDRigidBody *MMDPhysicsManager::AddRigidBody()
 	{
 		SABA_ASSERT(m_mmdPhysics != nullptr);
 		auto rigidBody = std::make_unique<MMDRigidBody>();
@@ -56,7 +56,7 @@ namespace saba
 		return ret;
 	}
 
-	MMDJoint* MMDPhysicsManager::AddJoint()
+	MMDJoint *MMDPhysicsManager::AddJoint()
 	{
 		SABA_ASSERT(m_mmdPhysics != nullptr);
 		auto joint = std::make_unique<MMDJoint>();
@@ -140,12 +140,12 @@ namespace saba
 
 	namespace
 	{
-		glm::mat3 InvZ(const glm::mat3& m)
+		glm::mat3 InvZ(const glm::mat3 &m)
 		{
 			const glm::mat3 invZ = glm::scale(glm::mat4(1.0f), glm::vec3(1, 1, -1));
 			return invZ * m * invZ;
 		}
-		glm::quat InvZ(const glm::quat& q)
+		glm::quat InvZ(const glm::quat &q)
 		{
 			auto rot0 = glm::mat3_cast(q);
 			auto rot1 = InvZ(rot0);
@@ -153,7 +153,7 @@ namespace saba
 		}
 	}
 
-	void MMDModel::UpdateAllAnimation(VMDAnimation * vmdAnim, float vmdFrame, float physicsElapsed)
+	void MMDModel::UpdateAllAnimation(VMDAnimation *vmdAnim, float vmdFrame, float physicsElapsed)
 	{
 		if (vmdAnim != nullptr)
 		{
@@ -169,18 +169,18 @@ namespace saba
 		UpdateNodeAnimation(true);
 	}
 
-	void MMDModel::LoadPose(const VPDFile & vpd, int frameCount)
+	void MMDModel::LoadPose(const VPDFile &vpd, int frameCount)
 	{
 		struct Pose
 		{
-			MMDNode*	m_node;
-			glm::vec3	m_beginTranslate;
-			glm::vec3	m_endTranslate;
-			glm::quat	m_beginRotate;
-			glm::quat	m_endRotate;
+			MMDNode *m_node;
+			glm::vec3 m_beginTranslate;
+			glm::vec3 m_endTranslate;
+			glm::quat m_beginRotate;
+			glm::quat m_endRotate;
 		};
 		std::vector<Pose> poses;
-		for (const auto& bone : vpd.m_bones)
+		for (const auto &bone : vpd.m_bones)
 		{
 			auto nodeIdx = GetNodeManager()->FindNodeIndex(bone.m_boneName);
 			if (MMDNodeManager::NPos != nodeIdx)
@@ -197,12 +197,12 @@ namespace saba
 
 		struct Morph
 		{
-			MMDMorph*	m_morph;
-			float		m_beginWeight;
-			float		m_endWeight;
+			MMDMorph *m_morph;
+			float m_beginWeight;
+			float m_endWeight;
 		};
 		std::vector<Morph> morphs;
-		for (const auto& vpdMorph : vpd.m_morphs)
+		for (const auto &vpdMorph : vpd.m_morphs)
 		{
 			auto morphIdx = GetMorphManager()->FindMorphIndex(vpdMorph.m_morphName);
 			if (MMDMorphManager::NPos != morphIdx)
@@ -222,7 +222,7 @@ namespace saba
 
 			// evaluate
 			float w = float(1 + i) / float(frameCount);
-			for (auto& pose : poses)
+			for (auto &pose : poses)
 			{
 				auto t = glm::mix(pose.m_beginTranslate, pose.m_endTranslate, w);
 				auto q = glm::slerp(pose.m_beginRotate, pose.m_endRotate, w);
@@ -230,7 +230,7 @@ namespace saba
 				pose.m_node->SetAnimationRotate(q);
 			}
 
-			for (auto& morph : morphs)
+			for (auto &morph : morphs)
 			{
 				auto weight = glm::mix(morph.m_beginWeight, morph.m_endWeight, w);
 				morph.m_morph->SetWeight(weight);
@@ -244,7 +244,7 @@ namespace saba
 			EndAnimation();
 		}
 
-		//SaveBaseAnimation();
+		// SaveBaseAnimation();
 	}
 
 	void MMDModel::UpdateAnimation()
