@@ -12,16 +12,11 @@
 namespace saba
 {
 	MMDIkSolver::MMDIkSolver()
-		: m_ikNode(nullptr)
-		, m_ikTarget(nullptr)
-		, m_iterateCount(1)
-		, m_limitAngle(glm::pi<float>() * 2.0f)
-		, m_enable(true)
-		, m_baseAnimEnable(true)
+		: m_ikNode(nullptr), m_ikTarget(nullptr), m_iterateCount(1), m_limitAngle(glm::pi<float>() * 2.0f), m_enable(true), m_baseAnimEnable(true)
 	{
 	}
 
-	void MMDIkSolver::AddIKChain(MMDNode * node, bool isKnee)
+	void MMDIkSolver::AddIKChain(MMDNode *node, bool isKnee)
 	{
 		IKChain chain;
 		chain.m_node = node;
@@ -36,11 +31,10 @@ namespace saba
 	}
 
 	void MMDIkSolver::AddIKChain(
-		MMDNode * node,
+		MMDNode *node,
 		bool axisLimit,
-		const glm::vec3 & limixMin,
-		const glm::vec3 & limitMax
-	)
+		const glm::vec3 &limixMin,
+		const glm::vec3 &limitMax)
 	{
 		IKChain chain;
 		chain.m_node = node;
@@ -51,7 +45,7 @@ namespace saba
 		AddIKChain(std::move(chain));
 	}
 
-	void MMDIkSolver::AddIKChain(MMDIkSolver::IKChain&& chain)
+	void MMDIkSolver::AddIKChain(MMDIkSolver::IKChain &&chain)
 	{
 		m_chains.emplace_back(chain);
 	}
@@ -70,7 +64,7 @@ namespace saba
 		}
 
 		// Initialize IKChain
-		for (auto& chain : m_chains)
+		for (auto &chain : m_chains)
 		{
 			chain.m_prevAngle = glm::vec3(0);
 			chain.m_node->SetIKRotate(glm::quat(1, 0, 0, 0));
@@ -91,14 +85,14 @@ namespace saba
 			if (dist < maxDist)
 			{
 				maxDist = dist;
-				for (auto& chain : m_chains)
+				for (auto &chain : m_chains)
 				{
 					chain.m_saveIKRot = chain.m_node->GetIKRotate();
 				}
 			}
 			else
 			{
-				for (auto& chain : m_chains)
+				for (auto &chain : m_chains)
 				{
 					chain.m_node->SetIKRotate(chain.m_saveIKRot);
 					chain.m_node->UpdateLocalTransform();
@@ -178,7 +172,7 @@ namespace saba
 			}
 		}
 
-		glm::vec3 Decompose(const glm::mat3& m, const glm::vec3& before)
+		glm::vec3 Decompose(const glm::mat3 &m, const glm::vec3 &before)
 		{
 			glm::vec3 r;
 			float sy = -m[0][2];
@@ -228,16 +222,16 @@ namespace saba
 
 			const float pi = glm::pi<float>();
 			glm::vec3 tests[] =
-			{
-				{ r.x + pi, pi - r.y, r.z + pi },
-				{ r.x + pi, pi - r.y, r.z - pi },
-				{ r.x + pi, -pi - r.y, r.z + pi },
-				{ r.x + pi, -pi - r.y, r.z - pi },
-				{ r.x - pi, pi - r.y, r.z + pi },
-				{ r.x - pi, pi - r.y, r.z - pi },
-				{ r.x - pi, -pi - r.y, r.z + pi },
-				{ r.x - pi, -pi - r.y, r.z - pi },
-			};
+				{
+					{r.x + pi, pi - r.y, r.z + pi},
+					{r.x + pi, pi - r.y, r.z - pi},
+					{r.x + pi, -pi - r.y, r.z + pi},
+					{r.x + pi, -pi - r.y, r.z - pi},
+					{r.x - pi, pi - r.y, r.z + pi},
+					{r.x - pi, pi - r.y, r.z - pi},
+					{r.x - pi, -pi - r.y, r.z + pi},
+					{r.x - pi, -pi - r.y, r.z - pi},
+				};
 
 			float errX = std::abs(DiffAngle(r.x, before.x));
 			float errY = std::abs(DiffAngle(r.y, before.y));
@@ -245,9 +239,7 @@ namespace saba
 			float minErr = errX + errY + errZ;
 			for (const auto test : tests)
 			{
-				float err = std::abs(DiffAngle(test.x, before.x))
-					+ std::abs(DiffAngle(test.y, before.y))
-					+ std::abs(DiffAngle(test.z, before.z));
+				float err = std::abs(DiffAngle(test.x, before.x)) + std::abs(DiffAngle(test.y, before.y)) + std::abs(DiffAngle(test.z, before.z));
 				if (err < minErr)
 				{
 					minErr = err;
@@ -257,7 +249,7 @@ namespace saba
 			return r;
 		}
 
-		glm::quat RotateFromTo(const glm::vec3& from, const glm::vec3& to)
+		glm::quat RotateFromTo(const glm::vec3 &from, const glm::vec3 &to)
 		{
 			auto const nf = glm::normalize(from);
 			auto const nt = glm::normalize(to);
@@ -268,13 +260,25 @@ namespace saba
 				glm::vec3 v = glm::abs(from);
 				if (v.x < v.y)
 				{
-					if (v.x < v.z) { v = glm::vec3(1, 0, 0); }
-					else { v = glm::vec3(0, 0, 1); }
+					if (v.x < v.z)
+					{
+						v = glm::vec3(1, 0, 0);
+					}
+					else
+					{
+						v = glm::vec3(0, 0, 1);
+					}
 				}
 				else
 				{
-					if (v.y < v.z) { v = glm::vec3(0, 1, 0); }
-					else { v = glm::vec3(0, 0, 1); }
+					if (v.y < v.z)
+					{
+						v = glm::vec3(0, 1, 0);
+					}
+					else
+					{
+						v = glm::vec3(0, 0, 1);
+					}
 				}
 				auto axis = glm::normalize(glm::cross(from, v));
 				return glm::quat(0, axis);
@@ -289,11 +293,11 @@ namespace saba
 	void MMDIkSolver::SolveCore(uint32_t iteration)
 	{
 		auto ikPos = glm::vec3(m_ikNode->GetGlobalTransform()[3]);
-		//for (auto& chain : m_chains)
+		// for (auto& chain : m_chains)
 		for (size_t chainIdx = 0; chainIdx < m_chains.size(); chainIdx++)
 		{
-			auto& chain = m_chains[chainIdx];
-			MMDNode* chainNode = chain.m_node;
+			auto &chain = m_chains[chainIdx];
+			MMDNode *chainNode = chain.m_node;
 			if (chainNode == m_ikTarget)
 			{
 				/*
@@ -309,24 +313,21 @@ namespace saba
 				// X,Y,Z 軸のいずれかしか回転しないものは専用の Solver を使用する
 				if ((chain.m_limitMin.x != 0 || chain.m_limitMax.x != 0) &&
 					(chain.m_limitMin.y == 0 || chain.m_limitMax.y == 0) &&
-					(chain.m_limitMin.z == 0 || chain.m_limitMax.z == 0)
-					)
+					(chain.m_limitMin.z == 0 || chain.m_limitMax.z == 0))
 				{
 					SolvePlane(iteration, chainIdx, SolveAxis::X);
 					continue;
 				}
 				else if ((chain.m_limitMin.y != 0 || chain.m_limitMax.y != 0) &&
-					(chain.m_limitMin.x == 0 || chain.m_limitMax.x == 0) &&
-					(chain.m_limitMin.z == 0 || chain.m_limitMax.z == 0)
-					)
+						 (chain.m_limitMin.x == 0 || chain.m_limitMax.x == 0) &&
+						 (chain.m_limitMin.z == 0 || chain.m_limitMax.z == 0))
 				{
 					SolvePlane(iteration, chainIdx, SolveAxis::Y);
 					continue;
 				}
 				else if ((chain.m_limitMin.z != 0 || chain.m_limitMax.z != 0) &&
-					(chain.m_limitMin.x == 0 || chain.m_limitMax.x == 0) &&
-					(chain.m_limitMin.y == 0 || chain.m_limitMax.y == 0)
-					)
+						 (chain.m_limitMin.x == 0 || chain.m_limitMax.x == 0) &&
+						 (chain.m_limitMin.y == 0 || chain.m_limitMax.y == 0))
 				{
 					SolvePlane(iteration, chainIdx, SolveAxis::Z);
 					continue;
@@ -408,7 +409,7 @@ namespace saba
 			break;
 		}
 
-		auto& chain = m_chains[chainIdx];
+		auto &chain = m_chains[chainIdx];
 		auto ikPos = glm::vec3(m_ikNode->GetGlobalTransform()[3]);
 
 		auto targetPos = glm::vec3(m_ikTarget->GetGlobalTransform()[3]);
@@ -475,4 +476,3 @@ namespace saba
 		chain.m_node->UpdateGlobalTransform();
 	}
 }
-
