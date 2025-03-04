@@ -185,11 +185,12 @@ namespace saba
 			auto nodeIdx = GetNodeManager()->FindNodeIndex(bone.m_boneName);
 			if (MMDNodeManager::NPos != nodeIdx)
 			{
+				assert(false);
 				Pose pose;
 				pose.m_node = GetNodeManager()->GetMMDNode(bone.m_boneName);
-				pose.m_beginTranslate = pose.m_node->GetAnimationTranslate();
+				// pose.m_beginTranslate = pose.m_node->GetAnimationTranslate();
 				pose.m_endTranslate = bone.m_translate * glm::vec3(1, 1, -1);
-				pose.m_beginRotate = pose.m_node->GetAnimationRotate();
+				// pose.m_beginRotate = pose.m_node->GetAnimationRotate();
 				pose.m_endRotate = InvZ(bone.m_quaternion);
 				poses.emplace_back(std::move(pose));
 			}

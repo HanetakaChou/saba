@@ -9,6 +9,7 @@
 #include <string>
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 
 namespace saba
@@ -23,7 +24,7 @@ namespace saba
 		void BeginUpdateTransform();
 		void EndUpdateTransform();
 
-		void UpdateLocalTransform();
+		glm::mat4 SyncLocalTransformToGlobal();
 		void UpdateGlobalTransform();
 		void UpdateChildTransform();
 
@@ -45,25 +46,42 @@ namespace saba
 		void SetScale(const glm::vec3 &s) { m_scale = s; }
 		const glm::vec3 &GetScale() const { return m_scale; }
 
-		void SetAnimationTranslate(const glm::vec3 &t) { m_animTranslate = t; }
-		const glm::vec3 &GetAnimationTranslate() const { return m_animTranslate; };
+		void SetAnimationTranslate(const glm::vec3 &animTranslate) { m_translate = (animTranslate + m_translate); }
 
-		void SetAnimationRotate(const glm::quat &q) { m_animRotate = q; }
-		const glm::quat &GetAnimationRotate() const { return m_animRotate; }
+		void SetAnimationRotate(const glm::quat &animRotate) { m_rotate = (animRotate * m_rotate); }
 
-		glm::vec3 AnimateTranslate() const { return m_animTranslate + m_translate; }
-		glm::quat AnimateRotate() const { return m_animRotate * m_rotate; }
+		glm::vec3 AnimateTranslate() const { return m_translate; }
+		glm::quat AnimateRotate() const { return m_rotate; }
 
-		void SetIKRotate(const glm::quat &ikr) { m_ikRotate = ikr; }
-		const glm::quat &GetIKRotate() const { return m_ikRotate; }
+		void SetAnimateRotate(const glm::quat &rotate) { m_rotate = rotate; }
 
 		MMDNode *GetParent() const { return m_parent; }
 		MMDNode *GetChild() const { return m_child; }
 		MMDNode *GetNext() const { return m_next; }
 		MMDNode *GetPrev() const { return m_prev; }
 
-		void SetLocalTransform(const glm::mat4 &m) { m_local = m; }
-		const glm::mat4 &GetLocalTransform() const { return m_local; }
+		void SetLocalTransform(const glm::mat4 &matrix)
+		{
+			m_translate = glm::vec3(matrix[3]);
+
+			m_scale = glm::vec3(
+				glm::length(glm::vec3(matrix[0])),
+				glm::length(glm::vec3(matrix[1])),
+				glm::length(glm::vec3(matrix[2])));
+			assert(glm::all(glm::epsilonEqual(m_scale, glm::vec3(1.0F), 1E-3F)));
+
+			m_rotate = glm::quat_cast(glm::mat3(
+				glm::vec3(matrix[0]) / m_scale.x,
+				glm::vec3(matrix[1]) / m_scale.y,
+				glm::vec3(matrix[2]) / m_scale.z));
+		}
+
+		const glm::mat4 GetLocalTransform() const
+		{
+			assert(glm::all(glm::epsilonEqual(m_scale, glm::vec3(1.0F), 1E-3F)));
+
+			return glm::translate(glm::mat4(1), m_translate) * glm::mat4_cast(m_rotate);
+		}
 
 		void SetGlobalTransform(const glm::mat4 &m) { m_global = m; }
 		const glm::mat4 &GetGlobalTransform() const { return m_global; }
@@ -83,8 +101,6 @@ namespace saba
 			m_translate = m_initTranslate;
 			m_rotate = m_initRotate;
 			m_scale = m_initScale;
-			// m_animTranslate = glm::vec3(0);
-			// m_animRotate = glm::quat(1, 0, 0, 0);
 		}
 		const glm::vec3 &GetInitialTranslate() const { return m_initTranslate; }
 		const glm::quat &GetInitialRotate() const { return m_initRotate; }
@@ -92,29 +108,34 @@ namespace saba
 
 		void SaveBaseAnimation()
 		{
-			m_baseAnimTranslate = m_animTranslate;
-			m_baseAnimRotate = m_animRotate;
+			// assert(false);
 		}
 
 		void LoadBaseAnimation()
 		{
-			m_animTranslate = m_baseAnimTranslate;
-			m_animRotate = m_baseAnimRotate;
+			assert(false);
 		}
 
 		void ClearBaseAnimation()
 		{
-			m_baseAnimTranslate = glm::vec3(0);
-			m_baseAnimRotate = glm::quat(1, 0, 0, 0);
+			// assert(false);
 		}
 
-		const glm::vec3 &GetBaseAnimationTranslate() const { return m_baseAnimTranslate; };
-		const glm::quat &GetBaseAnimationRotate() const { return m_baseAnimRotate; }
+		const glm::vec3 &GetBaseAnimationTranslate() const
+		{
+			assert(false);
+			return glm::vec3(0.0, 0.0, 0.0);
+		};
+
+		const glm::quat &GetBaseAnimationRotate() const
+		{
+			assert(false);
+			return glm::quat(1.0, 0.0, 0.0, 0.0);
+		}
 
 	protected:
 		virtual void OnBeginUpdateTransform();
 		virtual void OnEndUpdateTransfrom();
-		virtual void OnUpdateLocalTransform();
 
 	protected:
 		uint32_t m_index;
@@ -130,15 +151,6 @@ namespace saba
 		glm::quat m_rotate;
 		glm::vec3 m_scale;
 
-		glm::vec3 m_animTranslate;
-		glm::quat m_animRotate;
-
-		glm::vec3 m_baseAnimTranslate;
-		glm::quat m_baseAnimRotate;
-
-		glm::quat m_ikRotate;
-
-		glm::mat4 m_local;
 		glm::mat4 m_global;
 		glm::mat4 m_inverseInit;
 

@@ -55,11 +55,6 @@ namespace saba
 			node->SetAnimationRotate(glm::quat(1, 0, 0, 0));
 		}
 
-		for (auto &node : (*m_nodeMan.GetNodes()))
-		{
-			node->UpdateLocalTransform();
-		}
-
 		for (auto &morph : (*m_morphMan.GetMorphs()))
 		{
 			morph->SetWeight(0);
@@ -107,11 +102,6 @@ namespace saba
 		if (afterPhysicsAnim)
 		{
 			return;
-		}
-
-		for (auto &node : (*m_nodeMan.GetNodes()))
-		{
-			node->UpdateLocalTransform();
 		}
 
 		for (auto &node : (*m_nodeMan.GetNodes()))

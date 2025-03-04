@@ -41,9 +41,6 @@ namespace saba
 		void SetAppendWeight(float weight) { m_appendWeight = weight; }
 		float GetAppendWeight() const { return m_appendWeight; }
 
-		const glm::vec3 &GetAppendTranslate() const { return m_appendTranslate; }
-		const glm::quat &GetAppendRotate() const { return m_appendRotate; }
-
 		void SetIKSolver(MMDIkSolver *ik) { m_ikSolver = ik; }
 		MMDIkSolver *GetIKSolver() const { return m_ikSolver; }
 
@@ -52,7 +49,6 @@ namespace saba
 	protected:
 		void OnBeginUpdateTransform() override;
 		void OnEndUpdateTransfrom() override;
-		void OnUpdateLocalTransform() override;
 
 	private:
 		int32_t m_deformDepth;
@@ -63,9 +59,6 @@ namespace saba
 		bool m_isAppendTranslate;
 		bool m_isAppendLocal;
 		float m_appendWeight;
-
-		glm::vec3 m_appendTranslate;
-		glm::quat m_appendRotate;
 
 		MMDIkSolver *m_ikSolver;
 	};
