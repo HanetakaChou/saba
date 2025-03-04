@@ -24,8 +24,7 @@ namespace saba
 		std::string ResolveToonTexturePath(
 			const std::string mmdDataDir,
 			const std::string mmdLoadDir,
-			const std::string texName
-		)
+			const std::string texName)
 		{
 			std::string filepath = PathUtil::Combine(mmdLoadDir, texName);
 
@@ -50,23 +49,23 @@ namespace saba
 	{
 		ClearBaseAnimation();
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			node->SetAnimationTranslate(glm::vec3(0));
 			node->SetAnimationRotate(glm::quat(1, 0, 0, 0));
 		}
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			node->UpdateLocalTransform();
 		}
 
-		for (auto& morph : (*m_morphMan.GetMorphs()))
+		for (auto &morph : (*m_morphMan.GetMorphs()))
 		{
 			morph->SetWeight(0);
 		}
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			if (node->GetParent() == nullptr)
 			{
@@ -74,7 +73,7 @@ namespace saba
 			}
 		}
 
-		for (auto& solver : (*m_ikSolverMan.GetIKSolvers()))
+		for (auto &solver : (*m_ikSolverMan.GetIKSolvers()))
 		{
 			solver->Enable(true);
 			solver->Solve();
@@ -85,7 +84,7 @@ namespace saba
 
 	void PMDModel::BeginAnimation()
 	{
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			node->BeginUpdateTransform();
 		}
@@ -93,7 +92,7 @@ namespace saba
 
 	void PMDModel::EndAnimation()
 	{
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			node->EndUpdateTransform();
 		}
@@ -110,12 +109,12 @@ namespace saba
 			return;
 		}
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			node->UpdateLocalTransform();
 		}
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			if (node->GetParent() == nullptr)
 			{
@@ -123,7 +122,7 @@ namespace saba
 			}
 		}
 
-		for (auto& solver : (*m_ikSolverMan.GetIKSolvers()))
+		for (auto &solver : (*m_ikSolverMan.GetIKSolvers()))
 		{
 			solver->Solve();
 		}
@@ -131,7 +130,7 @@ namespace saba
 
 	void PMDModel::ResetPhysics()
 	{
-		MMDPhysicsManager* physicsMan = GetPhysicsManager();
+		MMDPhysicsManager *physicsMan = GetPhysicsManager();
 		auto physics = physicsMan->GetMMDPhysics();
 
 		if (physics == nullptr)
@@ -141,7 +140,7 @@ namespace saba
 
 		auto rigidbodys = physicsMan->GetRigidBodys();
 		auto joints = physicsMan->GetJoints();
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->SetActivation(false);
 			rb->ResetTransform();
@@ -149,16 +148,16 @@ namespace saba
 
 		physics->Update(1.0f / 60.0f);
 
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->ReflectGlobalTransform();
 		}
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->CalcLocalTransform();
 		}
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			if (node->GetParent() == nullptr)
 			{
@@ -166,7 +165,7 @@ namespace saba
 			}
 		}
 
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->Reset(physics);
 		}
@@ -174,7 +173,7 @@ namespace saba
 
 	void PMDModel::UpdatePhysicsAnimation(float elapsed)
 	{
-		MMDPhysicsManager* physicsMan = GetPhysicsManager();
+		MMDPhysicsManager *physicsMan = GetPhysicsManager();
 		auto physics = physicsMan->GetMMDPhysics();
 
 		if (physics == nullptr)
@@ -184,23 +183,23 @@ namespace saba
 
 		auto rigidbodys = physicsMan->GetRigidBodys();
 		auto joints = physicsMan->GetJoints();
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->SetActivation(true);
 		}
 
 		physics->Update(elapsed);
 
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->ReflectGlobalTransform();
 		}
-		for (auto& rb : (*rigidbodys))
+		for (auto &rb : (*rigidbodys))
 		{
 			rb->CalcLocalTransform();
 		}
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
 			if (node->GetParent() == nullptr)
 			{
@@ -211,12 +210,12 @@ namespace saba
 
 	void PMDModel::Update()
 	{
-		const auto* position = &m_positions[0];
-		const auto* normal = &m_normals[0];
-		const auto* bone = &m_bones[0];
-		const auto* boneWeight = &m_boneWeights[0];
-		auto* updatePosition = &m_updatePositions[0];
-		auto* updateNormal = &m_updateNormals[0];
+		const auto *position = &m_positions[0];
+		const auto *normal = &m_normals[0];
+		const auto *bone = &m_bones[0];
+		const auto *boneWeight = &m_boneWeights[0];
+		auto *updatePosition = &m_updatePositions[0];
+		auto *updateNormal = &m_updateNormals[0];
 
 		// 頂点をコピー
 		auto srcPos = position;
@@ -237,14 +236,14 @@ namespace saba
 		// Morph の処理
 		if (m_baseMorph.m_vertices.empty())
 		{
-			for (const auto& morph : (*m_morphMan.GetMorphs()))
+			for (const auto &morph : (*m_morphMan.GetMorphs()))
 			{
 				float weight = morph->GetWeight();
 				if (weight == 0.0f)
 				{
 					continue;
 				}
-				for (const auto& morphVtx : morph->m_vertices)
+				for (const auto &morphVtx : morph->m_vertices)
 				{
 					updatePosition[morphVtx.m_index] += morphVtx.m_position * weight;
 				}
@@ -252,27 +251,27 @@ namespace saba
 		}
 		else
 		{
-			for (const auto& morphVtx : m_baseMorph.m_vertices)
+			for (const auto &morphVtx : m_baseMorph.m_vertices)
 			{
 				updatePosition[morphVtx.m_index] = morphVtx.m_position;
 			}
-			for (const auto& morph : (*m_morphMan.GetMorphs()))
+			for (const auto &morph : (*m_morphMan.GetMorphs()))
 			{
 				float weight = morph->GetWeight();
 				if (weight == 0.0f)
 				{
 					continue;
 				}
-				for (const auto& morphVtx : morph->m_vertices)
+				for (const auto &morphVtx : morph->m_vertices)
 				{
-					const auto& baseMorphVtx = m_baseMorph.m_vertices[morphVtx.m_index];
+					const auto &baseMorphVtx = m_baseMorph.m_vertices[morphVtx.m_index];
 					updatePosition[baseMorphVtx.m_index] += morphVtx.m_position * weight;
 				}
 			}
 		}
 
 		// スキンメッシュに使用する変形マトリクスを事前計算
-		auto& nodes = (*m_nodeMan.GetNodes());
+		auto &nodes = (*m_nodeMan.GetNodes());
 		for (size_t i = 0; i < nodes.size(); i++)
 		{
 			m_transforms[i] = nodes[i]->GetGlobalTransform() * nodes[i]->GetInverseInitTransform();
@@ -284,8 +283,8 @@ namespace saba
 			auto node1 = m_nodeMan.GetNode(bone->y);
 			auto w0 = boneWeight->x;
 			auto w1 = boneWeight->y;
-			const auto& m0 = m_transforms[bone->x];
-			const auto& m1 = m_transforms[bone->y];
+			const auto &m0 = m_transforms[bone->x];
+			const auto &m1 = m_transforms[bone->y];
 
 			auto m = m0 * w0 + m1 * w1;
 			*updatePosition = glm::vec3(m * glm::vec4(*updatePosition, 1));
@@ -298,7 +297,7 @@ namespace saba
 		}
 	}
 
-	bool PMDModel::Load(const std::string& filepath, const std::string& mmdDataDir)
+	bool PMDModel::Load(const std::string &filepath, const std::string &mmdDataDir)
 	{
 		Destroy();
 
@@ -318,7 +317,7 @@ namespace saba
 		m_boneWeights.reserve(vertexCount);
 		m_bboxMax = glm::vec3(-std::numeric_limits<float>::max());
 		m_bboxMin = glm::vec3(std::numeric_limits<float>::max());
-		for (const auto& v : pmd.m_vertices)
+		for (const auto &v : pmd.m_vertices)
 		{
 			glm::vec3 pos = v.m_position * glm::vec3(1, 1, -1);
 			glm::vec3 nor = v.m_normal * glm::vec3(1, 1, -1);
@@ -337,7 +336,7 @@ namespace saba
 		m_updateNormals.resize(m_normals.size());
 
 		m_indices.reserve(pmd.m_faces.size() * 3);
-		for (const auto& face : pmd.m_faces)
+		for (const auto &face : pmd.m_faces)
 		{
 			for (int i = 0; i < 3; i++)
 			{
@@ -348,13 +347,12 @@ namespace saba
 
 		std::vector<std::string> toonTextures;
 		toonTextures.reserve(pmd.m_toonTextureNames.size());
-		for (const auto& toonTexName : pmd.m_toonTextureNames)
+		for (const auto &toonTexName : pmd.m_toonTextureNames)
 		{
 			std::string toonTexPath = ResolveToonTexturePath(
 				mmdDataDir,
 				dirPath,
-				toonTexName.ToUtf8String()
-				);
+				toonTexName.ToUtf8String());
 			toonTextures.emplace_back(std::move(toonTexPath));
 		}
 
@@ -362,7 +360,7 @@ namespace saba
 		m_materials.reserve(pmd.m_materials.size());
 		m_subMeshes.reserve(pmd.m_materials.size());
 		uint32_t beginIndex = 0;
-		for (const auto& pmdMat : pmd.m_materials)
+		for (const auto &pmdMat : pmd.m_materials)
 		{
 			MMDMaterial mat;
 			mat.m_diffuse = pmdMat.m_diffuse;
@@ -440,9 +438,9 @@ namespace saba
 			beginIndex = beginIndex + pmdMat.m_faceVertexCount;
 		}
 
-		for (const auto& pmdMorph : pmd.m_morphs)
+		for (const auto &pmdMorph : pmd.m_morphs)
 		{
-			PMDMorph* morph = nullptr;
+			PMDMorph *morph = nullptr;
 			if (pmdMorph.m_morphType == saba::PMDMorph::Base)
 			{
 				morph = &m_baseMorph;
@@ -466,19 +464,19 @@ namespace saba
 
 		// Nodeの作成
 		m_nodeMan.GetNodes()->reserve(pmd.m_bones.size());
-		for (const auto& bone : pmd.m_bones)
+		for (const auto &bone : pmd.m_bones)
 		{
-			auto* node = m_nodeMan.AddNode();
+			auto *node = m_nodeMan.AddNode();
 			node->SetName(bone.m_boneName.ToUtf8String());
 		}
 		for (size_t i = 0; i < pmd.m_bones.size(); i++)
 		{
-			const auto& bone = pmd.m_bones[i];
-			auto* node = m_nodeMan.GetNode(i);
+			const auto &bone = pmd.m_bones[i];
+			auto *node = m_nodeMan.GetNode(i);
 			if (bone.m_parent != 0xFFFF)
 			{
-				const auto& parentBone = pmd.m_bones[bone.m_parent];
-				auto* parentNode = m_nodeMan.GetNode(bone.m_parent);
+				const auto &parentBone = pmd.m_bones[bone.m_parent];
+				auto *parentNode = m_nodeMan.GetNode(bone.m_parent);
 				parentNode->AddChild(node);
 				glm::vec3 localPos = bone.m_position - parentBone.m_position;
 				localPos.z *= -1;
@@ -494,8 +492,7 @@ namespace saba
 			}
 			glm::mat4 init = glm::translate(
 				glm::mat4(1),
-				bone.m_position * glm::vec3(1, 1, -1)
-			);
+				bone.m_position * glm::vec3(1, 1, -1));
 			node->SetGlobalTransform(init);
 			node->CalculateInverseInitTransform();
 			node->SaveInitialTRS();
@@ -504,18 +501,18 @@ namespace saba
 
 		// IKを作成
 		m_ikSolverMan.GetIKSolvers()->reserve(pmd.m_iks.size());
-		for (const auto& ik : pmd.m_iks)
+		for (const auto &ik : pmd.m_iks)
 		{
 			auto solver = m_ikSolverMan.AddIKSolver();
-			auto* ikNode = m_nodeMan.GetNode(ik.m_ikNode);
+			auto *ikNode = m_nodeMan.GetNode(ik.m_ikNode);
 			solver->SetIKNode(ikNode);
 
-			auto* targetNode = m_nodeMan.GetNode(ik.m_ikTarget);
+			auto *targetNode = m_nodeMan.GetNode(ik.m_ikTarget);
 			solver->SetTargetNode(targetNode);
 
-			for (const auto& chain : ik.m_chanins)
+			for (const auto &chain : ik.m_chanins)
 			{
-				auto* chainNode = m_nodeMan.GetNode(chain);
+				auto *chainNode = m_nodeMan.GetNode(chain);
 				auto findPos = chainNode->GetName().find(u8"ひざ");
 				bool isKnee = false;
 				if (findPos != std::string::npos)
@@ -536,10 +533,10 @@ namespace saba
 			return false;
 		}
 
-		for (const auto& pmdRB : pmd.m_rigidBodies)
+		for (const auto &pmdRB : pmd.m_rigidBodies)
 		{
 			auto rb = m_physicsMan.AddRigidBody();
-			MMDNode* node = nullptr;
+			MMDNode *node = nullptr;
 			if (pmdRB.m_boneIndex != 0xFFFF)
 			{
 				node = m_nodeMan.GetMMDNode(pmdRB.m_boneIndex);
@@ -552,20 +549,19 @@ namespace saba
 			m_physicsMan.GetMMDPhysics()->AddRigidBody(rb);
 		}
 
-		for (const auto& pmdJoint : pmd.m_joints)
+		for (const auto &pmdJoint : pmd.m_joints)
 		{
 			if (pmdJoint.m_rigidBodyA != -1 &&
 				pmdJoint.m_rigidBodyB != -1 &&
 				pmdJoint.m_rigidBodyA != pmdJoint.m_rigidBodyB)
 			{
 				auto joint = m_physicsMan.AddJoint();
-				MMDNode* node = nullptr;
+				MMDNode *node = nullptr;
 				auto rigidBodys = m_physicsMan.GetRigidBodys();
 				bool ret = joint->CreateJoint(
 					pmdJoint,
 					(*rigidBodys)[pmdJoint.m_rigidBodyA].get(),
-					(*rigidBodys)[pmdJoint.m_rigidBodyB].get()
-				);
+					(*rigidBodys)[pmdJoint.m_rigidBodyB].get());
 				if (!ret)
 				{
 					SABA_ERROR("Create Joint Fail.\n");

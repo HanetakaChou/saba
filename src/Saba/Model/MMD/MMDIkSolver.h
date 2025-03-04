@@ -4,7 +4,7 @@
 //
 
 #ifndef SABA_MODEL_MMD_MMDIKSOLVER_H_
-#define	SABA_MODEL_MMD_MMDIKSOLVER_H_
+#define SABA_MODEL_MMD_MMDIKSOLVER_H_
 
 #include "MMDNode.h"
 
@@ -19,10 +19,10 @@ namespace saba
 	public:
 		MMDIkSolver();
 
-		void SetIKNode(MMDNode* node) { m_ikNode = node; }
-		void SetTargetNode(MMDNode* node) { m_ikTarget = node; }
-		MMDNode* GetIKNode() const { return m_ikNode; }
-		MMDNode* GetTargetNode() const { return m_ikTarget; }
+		void SetIKNode(MMDNode *node) { m_ikNode = node; }
+		void SetTargetNode(MMDNode *node) { m_ikTarget = node; }
+		MMDNode *GetIKNode() const { return m_ikNode; }
+		MMDNode *GetTargetNode() const { return m_ikTarget; }
 		std::string GetName() const
 		{
 			if (m_ikNode != nullptr)
@@ -40,13 +40,12 @@ namespace saba
 		void Enable(bool enable) { m_enable = enable; }
 		bool Enabled() { return m_enable; }
 
-		void AddIKChain(MMDNode* node, bool isKnee = false);
+		void AddIKChain(MMDNode *node, bool isKnee = false);
 		void AddIKChain(
-			MMDNode* node,
+			MMDNode *node,
 			bool axisLimit,
-			const glm::vec3& limixMin,
-			const glm::vec3& limitMax
-		);
+			const glm::vec3 &limixMin,
+			const glm::vec3 &limitMax);
 
 		void Solve();
 
@@ -58,20 +57,21 @@ namespace saba
 	private:
 		struct IKChain
 		{
-			MMDNode*	m_node;
-			bool		m_enableAxisLimit;
-			glm::vec3	m_limitMax;
-			glm::vec3	m_limitMin;
-			glm::vec3	m_prevAngle;
-			glm::quat	m_saveIKRot;
-			float		m_planeModeAngle;
+			MMDNode *m_node;
+			bool m_enableAxisLimit;
+			glm::vec3 m_limitMax;
+			glm::vec3 m_limitMin;
+			glm::vec3 m_prevAngle;
+			glm::quat m_saveIKRot;
+			float m_planeModeAngle;
 		};
 
 	private:
-		void AddIKChain(IKChain&& chain);
+		void AddIKChain(IKChain &&chain);
 		void SolveCore(uint32_t iteration);
 
-		enum class SolveAxis {
+		enum class SolveAxis
+		{
 			X,
 			Y,
 			Z,
@@ -79,14 +79,13 @@ namespace saba
 		void SolvePlane(uint32_t iteration, size_t chainIdx, SolveAxis solveAxis);
 
 	private:
-		std::vector<IKChain>	m_chains;
-		MMDNode*	m_ikNode;
-		MMDNode*	m_ikTarget;
-		uint32_t	m_iterateCount;
-		float		m_limitAngle;
-		bool		m_enable;
-		bool		m_baseAnimEnable;
-
+		std::vector<IKChain> m_chains;
+		MMDNode *m_ikNode;
+		MMDNode *m_ikTarget;
+		uint32_t m_iterateCount;
+		float m_limitAngle;
+		bool m_enable;
+		bool m_baseAnimEnable;
 	};
 }
 

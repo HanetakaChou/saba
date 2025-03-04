@@ -12,30 +12,11 @@
 namespace saba
 {
 	MMDNode::MMDNode()
-		: m_index(0)
-		, m_enableIK(false)
-		, m_parent(nullptr)
-		, m_child(nullptr)
-		, m_next(nullptr)
-		, m_prev(nullptr)
-		, m_translate(0)
-		, m_rotate(1, 0, 0, 0)
-		, m_scale(1)
-		, m_animTranslate(0)
-		, m_animRotate(1, 0, 0, 0)
-		, m_baseAnimTranslate(0)
-		, m_baseAnimRotate(1, 0, 0, 0)
-		, m_ikRotate(1, 0, 0, 0)
-		, m_local(1)
-		, m_global(1)
-		, m_inverseInit(1)
-		, m_initTranslate(0)
-		, m_initRotate(1, 0, 0, 0)
-		, m_initScale(1)
+		: m_index(0), m_enableIK(false), m_parent(nullptr), m_child(nullptr), m_next(nullptr), m_prev(nullptr), m_translate(0), m_rotate(1, 0, 0, 0), m_scale(1), m_animTranslate(0), m_animRotate(1, 0, 0, 0), m_baseAnimTranslate(0), m_baseAnimRotate(1, 0, 0, 0), m_ikRotate(1, 0, 0, 0), m_local(1), m_global(1), m_inverseInit(1), m_initTranslate(0), m_initRotate(1, 0, 0, 0), m_initScale(1)
 	{
 	}
 
-	void MMDNode::AddChild(MMDNode * child)
+	void MMDNode::AddChild(MMDNode *child)
 	{
 		SABA_ASSERT(child != nullptr);
 		if (child == nullptr)
@@ -90,7 +71,7 @@ namespace saba
 		{
 			m_global = m_parent->m_global * m_local;
 		}
-		MMDNode* child = m_child;
+		MMDNode *child = m_child;
 		while (child != nullptr)
 		{
 			child->UpdateGlobalTransform();
@@ -100,7 +81,7 @@ namespace saba
 
 	void MMDNode::UpdateChildTransform()
 	{
-		MMDNode* child = m_child;
+		MMDNode *child = m_child;
 		while (child != nullptr)
 		{
 			child->UpdateGlobalTransform();

@@ -25,7 +25,7 @@ namespace saba
 
 	namespace
 	{
-		glm::mat4 InvZ(const glm::mat4& m)
+		glm::mat4 InvZ(const glm::mat4 &m)
 		{
 			const glm::mat4 invZ = glm::scale(glm::mat4(1), glm::vec3(1, 1, -1));
 			return invZ * m * invZ;
@@ -34,13 +34,13 @@ namespace saba
 
 	struct MMDFilterCallback : public btOverlapFilterCallback
 	{
-		bool needBroadphaseCollision(btBroadphaseProxy* proxy0, btBroadphaseProxy* proxy1) const override
+		bool needBroadphaseCollision(btBroadphaseProxy *proxy0, btBroadphaseProxy *proxy1) const override
 		{
 			auto findIt = std::find_if(
 				m_nonFilterProxy.begin(),
 				m_nonFilterProxy.end(),
-				[proxy0, proxy1](const auto& x) {return x == proxy0 || x == proxy1; }
-			);
+				[proxy0, proxy1](const auto &x)
+				{ return x == proxy0 || x == proxy1; });
 			if (findIt != m_nonFilterProxy.end())
 			{
 				return true;
@@ -50,12 +50,11 @@ namespace saba
 			return collides;
 		}
 
-		std::vector<btBroadphaseProxy*> m_nonFilterProxy;
+		std::vector<btBroadphaseProxy *> m_nonFilterProxy;
 	};
 
 	MMDPhysics::MMDPhysics()
-		: m_fps(120.0f)
-		, m_maxSubStepCount(10)
+		: m_fps(120.0f), m_maxSubStepCount(10)
 	{
 	}
 
@@ -76,8 +75,7 @@ namespace saba
 			m_dispatcher.get(),
 			m_broadphase.get(),
 			m_solver.get(),
-			m_collisionConfig.get()
-			);
+			m_collisionConfig.get());
 
 		m_world->setGravity(btVector3(0, -9.8f * 10.0f, 0));
 
@@ -138,7 +136,6 @@ namespace saba
 		return m_maxSubStepCount;
 	}
 
-
 	void MMDPhysics::Update(float time)
 	{
 		if (m_world != nullptr)
@@ -147,21 +144,20 @@ namespace saba
 		}
 	}
 
-	void MMDPhysics::AddRigidBody(MMDRigidBody * mmdRB)
+	void MMDPhysics::AddRigidBody(MMDRigidBody *mmdRB)
 	{
 		m_world->addRigidBody(
 			mmdRB->GetRigidBody(),
 			1 << mmdRB->GetGroup(),
-			mmdRB->GetGroupMask()
-		);
+			mmdRB->GetGroupMask());
 	}
 
-	void MMDPhysics::RemoveRigidBody(MMDRigidBody * mmdRB)
+	void MMDPhysics::RemoveRigidBody(MMDRigidBody *mmdRB)
 	{
 		m_world->removeRigidBody(mmdRB->GetRigidBody());
 	}
 
-	void MMDPhysics::AddJoint(MMDJoint * mmdJoint)
+	void MMDPhysics::AddJoint(MMDJoint *mmdJoint)
 	{
 		if (mmdJoint->GetConstraint() != nullptr)
 		{
@@ -169,7 +165,7 @@ namespace saba
 		}
 	}
 
-	void MMDPhysics::RemoveJoint(MMDJoint * mmdJoint)
+	void MMDPhysics::RemoveJoint(MMDJoint *mmdJoint)
 	{
 		if (mmdJoint->GetConstraint() != nullptr)
 		{
@@ -177,7 +173,7 @@ namespace saba
 		}
 	}
 
-	btDiscreteDynamicsWorld * MMDPhysics::GetDynamicsWorld() const
+	btDiscreteDynamicsWorld *MMDPhysics::GetDynamicsWorld() const
 	{
 		return m_world.get();
 	}
@@ -189,19 +185,19 @@ namespace saba
 	class DefaultMotionState : public MMDMotionState
 	{
 	public:
-		DefaultMotionState(const glm::mat4& transform)
+		DefaultMotionState(const glm::mat4 &transform)
 		{
 			glm::mat4 trans = InvZ(transform);
 			m_transform.setFromOpenGLMatrix(&trans[0][0]);
 			m_initialTransform = m_transform;
 		}
 
-		void getWorldTransform(btTransform& worldTransform) const override
+		void getWorldTransform(btTransform &worldTransform) const override
 		{
 			worldTransform = m_transform;
 		}
 
-		void setWorldTransform(const btTransform& worldTransform) override
+		void setWorldTransform(const btTransform &worldTransform) override
 		{
 			m_transform = worldTransform;
 		}
@@ -215,30 +211,27 @@ namespace saba
 		{
 		}
 
-
 	private:
-		btTransform	m_initialTransform;
-		btTransform	m_transform;
+		btTransform m_initialTransform;
+		btTransform m_transform;
 	};
 
 	class DynamicMotionState : public MMDMotionState
 	{
 	public:
-		DynamicMotionState(MMDNode* node, const glm::mat4& offset, bool override = true)
-			: m_node(node)
-			, m_offset(offset)
-			, m_override(override)
+		DynamicMotionState(MMDNode *node, const glm::mat4 &offset, bool override = true)
+			: m_node(node), m_offset(offset), m_override(override)
 		{
 			m_invOffset = glm::inverse(offset);
 			Reset();
 		}
 
-		void getWorldTransform(btTransform& worldTransform) const override
+		void getWorldTransform(btTransform &worldTransform) const override
 		{
 			worldTransform = m_transform;
 		}
 
-		void setWorldTransform(const btTransform& worldTransform) override
+		void setWorldTransform(const btTransform &worldTransform) override
 		{
 			m_transform = worldTransform;
 		}
@@ -263,31 +256,29 @@ namespace saba
 		}
 
 	private:
-		MMDNode*	m_node;
-		glm::mat4	m_offset;
-		glm::mat4	m_invOffset;
-		btTransform	m_transform;
-		bool		m_override;
+		MMDNode *m_node;
+		glm::mat4 m_offset;
+		glm::mat4 m_invOffset;
+		btTransform m_transform;
+		bool m_override;
 	};
 
 	class DynamicAndBoneMergeMotionState : public MMDMotionState
 	{
 	public:
-		DynamicAndBoneMergeMotionState(MMDNode* node, const glm::mat4& offset, bool override = true)
-			: m_node(node)
-			, m_offset(offset)
-			, m_override(override)
+		DynamicAndBoneMergeMotionState(MMDNode *node, const glm::mat4 &offset, bool override = true)
+			: m_node(node), m_offset(offset), m_override(override)
 		{
 			m_invOffset = glm::inverse(offset);
 			Reset();
 		}
 
-		void getWorldTransform(btTransform& worldTransform) const override
+		void getWorldTransform(btTransform &worldTransform) const override
 		{
 			worldTransform = m_transform;
 		}
 
-		void setWorldTransform(const btTransform& worldTransform) override
+		void setWorldTransform(const btTransform &worldTransform) override
 		{
 			m_transform = worldTransform;
 		}
@@ -314,24 +305,22 @@ namespace saba
 		}
 
 	private:
-		MMDNode*	m_node;
-		glm::mat4	m_offset;
-		glm::mat4	m_invOffset;
-		btTransform	m_transform;
-		bool		m_override;
-
+		MMDNode *m_node;
+		glm::mat4 m_offset;
+		glm::mat4 m_invOffset;
+		btTransform m_transform;
+		bool m_override;
 	};
 
 	class KinematicMotionState : public MMDMotionState
 	{
 	public:
-		KinematicMotionState(MMDNode* node, const glm::mat4& offset)
-			: m_node(node)
-			, m_offset(offset)
+		KinematicMotionState(MMDNode *node, const glm::mat4 &offset)
+			: m_node(node), m_offset(offset)
 		{
 		}
 
-		void getWorldTransform(btTransform& worldTransform) const override
+		void getWorldTransform(btTransform &worldTransform) const override
 		{
 			glm::mat4 m;
 			if (m_node != nullptr)
@@ -346,7 +335,7 @@ namespace saba
 			worldTransform.setFromOpenGLMatrix(&m[0][0]);
 		}
 
-		void setWorldTransform(const btTransform& worldTransform) override
+		void setWorldTransform(const btTransform &worldTransform) override
 		{
 		}
 
@@ -359,16 +348,12 @@ namespace saba
 		}
 
 	private:
-		MMDNode*	m_node;
-		glm::mat4	m_offset;
+		MMDNode *m_node;
+		glm::mat4 m_offset;
 	};
 
 	MMDRigidBody::MMDRigidBody()
-		: m_rigidBodyType(RigidBodyType::Kinematic)
-		, m_group(0)
-		, m_groupMask(0)
-		, m_node(0)
-		, m_offsetMat(1)
+		: m_rigidBodyType(RigidBodyType::Kinematic), m_group(0), m_groupMask(0), m_node(0), m_offsetMat(1)
 	{
 	}
 
@@ -376,7 +361,7 @@ namespace saba
 	{
 	}
 
-	bool MMDRigidBody::Create(const PMDRigidBodyExt& pmdRigidBody, MMDModel* model, MMDNode* node)
+	bool MMDRigidBody::Create(const PMDRigidBodyExt &pmdRigidBody, MMDModel *model, MMDNode *node)
 	{
 		Destroy();
 
@@ -389,14 +374,12 @@ namespace saba
 			m_shape = std::make_unique<btBoxShape>(btVector3(
 				pmdRigidBody.m_shapeWidth,
 				pmdRigidBody.m_shapeHeight,
-				pmdRigidBody.m_shapeDepth
-			));
+				pmdRigidBody.m_shapeDepth));
 			break;
 		case PMDRigidBodyShape::Capsule:
 			m_shape = std::make_unique<btCapsuleShape>(
 				pmdRigidBody.m_shapeWidth,
-				pmdRigidBody.m_shapeHeight
-				);
+				pmdRigidBody.m_shapeHeight);
 			break;
 		default:
 			break;
@@ -431,7 +414,7 @@ namespace saba
 		}
 		else
 		{
-			MMDNode* root = model->GetNodeManager()->GetMMDNode(0);
+			MMDNode *root = model->GetNodeManager()->GetMMDNode(0);
 			glm::mat4 global = root->GetGlobalTransform();
 			rbMat = InvZ(global) * rbMat;
 		}
@@ -443,12 +426,12 @@ namespace saba
 		}
 		else
 		{
-			MMDNode* root = model->GetNodeManager()->GetMMDNode(0);
+			MMDNode *root = model->GetNodeManager()->GetMMDNode(0);
 			m_offsetMat = glm::inverse(root->GetGlobalTransform()) * rbMat;
 		}
 
-		btMotionState* motionState = nullptr;
-		MMDNode* kinematicNode = nullptr;
+		btMotionState *motionState = nullptr;
+		MMDNode *kinematicNode = nullptr;
 		bool overrideNode = true;
 		if (node != nullptr)
 		{
@@ -502,7 +485,7 @@ namespace saba
 		return true;
 	}
 
-	bool MMDRigidBody::Create(const PMXRigidbody & pmxRigidBody, MMDModel* model, MMDNode * node)
+	bool MMDRigidBody::Create(const PMXRigidbody &pmxRigidBody, MMDModel *model, MMDNode *node)
 	{
 		Destroy();
 
@@ -515,14 +498,12 @@ namespace saba
 			m_shape = std::make_unique<btBoxShape>(btVector3(
 				pmxRigidBody.m_shapeSize.x,
 				pmxRigidBody.m_shapeSize.y,
-				pmxRigidBody.m_shapeSize.z
-			));
+				pmxRigidBody.m_shapeSize.z));
 			break;
 		case PMXRigidbody::Shape::Capsule:
 			m_shape = std::make_unique<btCapsuleShape>(
 				pmxRigidBody.m_shapeSize.x,
-				pmxRigidBody.m_shapeSize.y
-				);
+				pmxRigidBody.m_shapeSize.y);
 			break;
 		default:
 			break;
@@ -551,7 +532,7 @@ namespace saba
 
 		glm::mat4 rbMat = InvZ(translateMat * rotMat);
 
-		MMDNode* kinematicNode = nullptr;
+		MMDNode *kinematicNode = nullptr;
 		if (node != nullptr)
 		{
 			m_offsetMat = glm::inverse(node->GetGlobalTransform()) * rbMat;
@@ -559,12 +540,12 @@ namespace saba
 		}
 		else
 		{
-			MMDNode* root = model->GetNodeManager()->GetMMDNode(0);
+			MMDNode *root = model->GetNodeManager()->GetMMDNode(0);
 			m_offsetMat = glm::inverse(root->GetGlobalTransform()) * rbMat;
 			kinematicNode = root;
 		}
 
-		btMotionState* MMDMotionState = nullptr;
+		btMotionState *MMDMotionState = nullptr;
 		if (pmxRigidBody.m_op == PMXRigidbody::Operation::Static)
 		{
 			m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
@@ -625,7 +606,7 @@ namespace saba
 		m_shape = nullptr;
 	}
 
-	btRigidBody * MMDRigidBody::GetRigidBody() const
+	btRigidBody *MMDRigidBody::GetRigidBody() const
 	{
 		return m_rigidBody.get();
 	}
@@ -669,7 +650,7 @@ namespace saba
 		}
 	}
 
-	void MMDRigidBody::Reset(MMDPhysics* physics)
+	void MMDRigidBody::Reset(MMDPhysics *physics)
 	{
 		auto cache = physics->GetDynamicsWorld()->getPairCache();
 		if (cache != nullptr)
@@ -719,7 +700,6 @@ namespace saba
 		return InvZ(mat);
 	}
 
-
 	//*******************
 	// MMDJoint
 	//*******************
@@ -731,7 +711,7 @@ namespace saba
 	{
 	}
 
-	bool MMDJoint::CreateJoint(const PMDJointExt& pmdJoint, MMDRigidBody* rigidBodyA, MMDRigidBody* rigidBodyB)
+	bool MMDJoint::CreateJoint(const PMDJointExt &pmdJoint, MMDRigidBody *rigidBodyA, MMDRigidBody *rigidBodyB)
 	{
 		Destroy();
 
@@ -743,8 +723,7 @@ namespace saba
 		transform.setOrigin(btVector3(
 			pmdJoint.m_jointPos.x,
 			pmdJoint.m_jointPos.y,
-			pmdJoint.m_jointPos.z
-		));
+			pmdJoint.m_jointPos.z));
 		transform.setBasis(rotMat);
 
 		btTransform invA = rigidBodyA->GetRigidBody()->getWorldTransform().inverse();
@@ -761,24 +740,20 @@ namespace saba
 		constraint->setLinearLowerLimit(btVector3(
 			pmdJoint.m_constrainPos1.x,
 			pmdJoint.m_constrainPos1.y,
-			pmdJoint.m_constrainPos1.z
-		));
+			pmdJoint.m_constrainPos1.z));
 		constraint->setLinearUpperLimit(btVector3(
 			pmdJoint.m_constrainPos2.x,
 			pmdJoint.m_constrainPos2.y,
-			pmdJoint.m_constrainPos2.z
-		));
+			pmdJoint.m_constrainPos2.z));
 
 		constraint->setAngularLowerLimit(btVector3(
 			pmdJoint.m_constrainRot1.x,
 			pmdJoint.m_constrainRot1.y,
-			pmdJoint.m_constrainRot1.z
-		));
+			pmdJoint.m_constrainRot1.z));
 		constraint->setAngularUpperLimit(btVector3(
 			pmdJoint.m_constrainRot2.x,
 			pmdJoint.m_constrainRot2.y,
-			pmdJoint.m_constrainRot2.z
-		));
+			pmdJoint.m_constrainRot2.z));
 
 		if (pmdJoint.m_springPos.x != 0)
 		{
@@ -816,7 +791,7 @@ namespace saba
 		return true;
 	}
 
-	bool MMDJoint::CreateJoint(const PMXJoint& pmxJoint, MMDRigidBody* rigidBodyA, MMDRigidBody* rigidBodyB)
+	bool MMDJoint::CreateJoint(const PMXJoint &pmxJoint, MMDRigidBody *rigidBodyA, MMDRigidBody *rigidBodyB)
 	{
 		Destroy();
 
@@ -828,8 +803,7 @@ namespace saba
 		transform.setOrigin(btVector3(
 			pmxJoint.m_translate.x,
 			pmxJoint.m_translate.y,
-			pmxJoint.m_translate.z
-		));
+			pmxJoint.m_translate.z));
 		transform.setBasis(rotMat);
 
 		btTransform invA = rigidBodyA->GetRigidBody()->getWorldTransform().inverse();
@@ -846,24 +820,20 @@ namespace saba
 		constraint->setLinearLowerLimit(btVector3(
 			pmxJoint.m_translateLowerLimit.x,
 			pmxJoint.m_translateLowerLimit.y,
-			pmxJoint.m_translateLowerLimit.z
-		));
+			pmxJoint.m_translateLowerLimit.z));
 		constraint->setLinearUpperLimit(btVector3(
 			pmxJoint.m_translateUpperLimit.x,
 			pmxJoint.m_translateUpperLimit.y,
-			pmxJoint.m_translateUpperLimit.z
-		));
+			pmxJoint.m_translateUpperLimit.z));
 
 		constraint->setAngularLowerLimit(btVector3(
 			pmxJoint.m_rotateLowerLimit.x,
 			pmxJoint.m_rotateLowerLimit.y,
-			pmxJoint.m_rotateLowerLimit.z
-		));
+			pmxJoint.m_rotateLowerLimit.z));
 		constraint->setAngularUpperLimit(btVector3(
 			pmxJoint.m_rotateUpperLimit.x,
 			pmxJoint.m_rotateUpperLimit.y,
-			pmxJoint.m_rotateUpperLimit.z
-		));
+			pmxJoint.m_rotateUpperLimit.z));
 
 		if (pmxJoint.m_springTranslateFactor.x != 0)
 		{
@@ -906,7 +876,7 @@ namespace saba
 		m_constraint = nullptr;
 	}
 
-	btTypedConstraint * MMDJoint::GetConstraint() const
+	btTypedConstraint *MMDJoint::GetConstraint() const
 	{
 		return m_constraint.get();
 	}

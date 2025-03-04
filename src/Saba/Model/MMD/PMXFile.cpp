@@ -17,18 +17,18 @@ namespace saba
 	{
 
 		template <typename T>
-		bool Read(T* val, File& file)
+		bool Read(T *val, File &file)
 		{
 			return file.Read(val);
 		}
 
 		template <typename T>
-		bool Read(T* valArray, size_t size, File& file)
+		bool Read(T *valArray, size_t size, File &file)
 		{
 			return file.Read(valArray, size);
 		}
 
-		bool ReadString(PMXFile* pmx, std::string* val, File& file)
+		bool ReadString(PMXFile *pmx, std::string *val, File &file)
 		{
 			uint32_t bufSize;
 			if (!Read(&bufSize, file))
@@ -64,7 +64,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadIndex(int32_t* index, uint8_t indexSize, File& file)
+		bool ReadIndex(int32_t *index, uint8_t indexSize, File &file)
 		{
 			switch (indexSize)
 			{
@@ -81,7 +81,7 @@ namespace saba
 					*index = -1;
 				}
 			}
-				break;
+			break;
 			case 2:
 			{
 				uint16_t idx;
@@ -95,23 +95,23 @@ namespace saba
 					*index = -1;
 				}
 			}
-				break;
+			break;
 			case 4:
 			{
 				uint32_t idx;
 				Read(&idx, file);
 				*index = (int32_t)idx;
 			}
-				break;
+			break;
 			default:
 				return false;
 			}
 			return !file.IsBad();
 		}
 
-		bool ReadHeader(PMXFile* pmxFile, File& file)
+		bool ReadHeader(PMXFile *pmxFile, File &file)
 		{
-			auto& header = pmxFile->m_header;
+			auto &header = pmxFile->m_header;
 
 			Read(&header.m_magic, file);
 			Read(&header.m_version, file);
@@ -131,9 +131,9 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadInfo(PMXFile* pmx, File& file)
+		bool ReadInfo(PMXFile *pmx, File &file)
 		{
-			auto& info = pmx->m_info;
+			auto &info = pmx->m_info;
 
 			ReadString(pmx, &info.m_modelName, file);
 			ReadString(pmx, &info.m_englishModelName, file);
@@ -143,7 +143,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadVertex(PMXFile* pmx, File& file)
+		bool ReadVertex(PMXFile *pmx, File &file)
 		{
 			int32_t vertexCount;
 			if (!Read(&vertexCount, file))
@@ -151,9 +151,9 @@ namespace saba
 				return false;
 			}
 
-			auto& vertices = pmx->m_vertices;
+			auto &vertices = pmx->m_vertices;
 			vertices.resize(vertexCount);
-			for (auto& vertex : vertices)
+			for (auto &vertex : vertices)
 			{
 				Read(&vertex.m_position, file);
 				Read(&vertex.m_normal, file);
@@ -213,7 +213,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadFace(PMXFile* pmx, File& file)
+		bool ReadFace(PMXFile *pmx, File &file)
 		{
 			int32_t faceCount = 0;
 			if (!Read(&faceCount, file))
@@ -237,7 +237,7 @@ namespace saba
 					pmx->m_faces[faceIdx].m_vertices[2] = vertices[faceIdx * 3 + 2];
 				}
 			}
-				break;
+			break;
 			case 2:
 			{
 				std::vector<uint16_t> vertices(faceCount * 3);
@@ -249,7 +249,7 @@ namespace saba
 					pmx->m_faces[faceIdx].m_vertices[2] = vertices[faceIdx * 3 + 2];
 				}
 			}
-				break;
+			break;
 			case 4:
 			{
 				std::vector<uint32_t> vertices(faceCount * 3);
@@ -261,7 +261,7 @@ namespace saba
 					pmx->m_faces[faceIdx].m_vertices[2] = vertices[faceIdx * 3 + 2];
 				}
 			}
-				break;
+			break;
 			default:
 				return false;
 			}
@@ -269,7 +269,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadTexture(PMXFile* pmx, File& file)
+		bool ReadTexture(PMXFile *pmx, File &file)
 		{
 			int32_t texCount = 0;
 			if (!Read(&texCount, file))
@@ -279,7 +279,7 @@ namespace saba
 
 			pmx->m_textures.resize(texCount);
 
-			for (auto& tex : pmx->m_textures)
+			for (auto &tex : pmx->m_textures)
 			{
 				ReadString(pmx, &tex.m_textureName, file);
 			}
@@ -287,7 +287,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadMaterial(PMXFile* pmx, File& file)
+		bool ReadMaterial(PMXFile *pmx, File &file)
 		{
 			int32_t matCount = 0;
 			if (!Read(&matCount, file))
@@ -297,7 +297,7 @@ namespace saba
 
 			pmx->m_materials.resize(matCount);
 
-			for (auto& mat : pmx->m_materials)
+			for (auto &mat : pmx->m_materials)
 			{
 				ReadString(pmx, &mat.m_name, file);
 				ReadString(pmx, &mat.m_englishName, file);
@@ -340,7 +340,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadBone(PMXFile* pmx, File& file)
+		bool ReadBone(PMXFile *pmx, File &file)
 		{
 			int32_t boneCount;
 			if (!Read(&boneCount, file))
@@ -350,7 +350,7 @@ namespace saba
 
 			pmx->m_bones.resize(boneCount);
 
-			for (auto& bone : pmx->m_bones)
+			for (auto &bone : pmx->m_bones)
 			{
 				ReadString(pmx, &bone.m_name, file);
 				ReadString(pmx, &bone.m_englishName, file);
@@ -406,7 +406,7 @@ namespace saba
 					}
 
 					bone.m_ikLinks.resize(linkCount);
-					for (auto& ikLink : bone.m_ikLinks)
+					for (auto &ikLink : bone.m_ikLinks)
 					{
 						ReadIndex(&ikLink.m_ikBoneIndex, pmx->m_header.m_boneIndexSize, file);
 						Read(&ikLink.m_enableLimit, file);
@@ -423,7 +423,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadMorph(PMXFile* pmx, File& file)
+		bool ReadMorph(PMXFile *pmx, File &file)
 		{
 			int32_t morphCount;
 			if (!Read(&morphCount, file))
@@ -433,7 +433,7 @@ namespace saba
 
 			pmx->m_morphs.resize(morphCount);
 
-			for (auto& morph : pmx->m_morphs)
+			for (auto &morph : pmx->m_morphs)
 			{
 				ReadString(pmx, &morph.m_name, file);
 				ReadString(pmx, &morph.m_englishName, file);
@@ -450,21 +450,20 @@ namespace saba
 				if (morph.m_morphType == PMXMorphType::Position)
 				{
 					morph.m_positionMorph.resize(dataCount);
-					for (auto& data : morph.m_positionMorph)
+					for (auto &data : morph.m_positionMorph)
 					{
 						ReadIndex(&data.m_vertexIndex, pmx->m_header.m_vertexIndexSize, file);
 						Read(&data.m_position, file);
 					}
 				}
 				else if (morph.m_morphType == PMXMorphType::UV ||
-					morph.m_morphType == PMXMorphType::AddUV1 ||
-					morph.m_morphType == PMXMorphType::AddUV2 ||
-					morph.m_morphType == PMXMorphType::AddUV3 ||
-					morph.m_morphType == PMXMorphType::AddUV4
-					)
+						 morph.m_morphType == PMXMorphType::AddUV1 ||
+						 morph.m_morphType == PMXMorphType::AddUV2 ||
+						 morph.m_morphType == PMXMorphType::AddUV3 ||
+						 morph.m_morphType == PMXMorphType::AddUV4)
 				{
 					morph.m_uvMorph.resize(dataCount);
-					for (auto& data : morph.m_uvMorph)
+					for (auto &data : morph.m_uvMorph)
 					{
 						ReadIndex(&data.m_vertexIndex, pmx->m_header.m_vertexIndexSize, file);
 						Read(&data.m_uv, file);
@@ -473,7 +472,7 @@ namespace saba
 				else if (morph.m_morphType == PMXMorphType::Bone)
 				{
 					morph.m_boneMorph.resize(dataCount);
-					for (auto& data : morph.m_boneMorph)
+					for (auto &data : morph.m_boneMorph)
 					{
 						ReadIndex(&data.m_boneIndex, pmx->m_header.m_boneIndexSize, file);
 						Read(&data.m_position, file);
@@ -483,7 +482,7 @@ namespace saba
 				else if (morph.m_morphType == PMXMorphType::Material)
 				{
 					morph.m_materialMorph.resize(dataCount);
-					for (auto& data : morph.m_materialMorph)
+					for (auto &data : morph.m_materialMorph)
 					{
 						ReadIndex(&data.m_materialIndex, pmx->m_header.m_materialIndexSize, file);
 						Read(&data.m_opType, file);
@@ -501,7 +500,7 @@ namespace saba
 				else if (morph.m_morphType == PMXMorphType::Group)
 				{
 					morph.m_groupMorph.resize(dataCount);
-					for (auto& data : morph.m_groupMorph)
+					for (auto &data : morph.m_groupMorph)
 					{
 						ReadIndex(&data.m_morphIndex, pmx->m_header.m_morphIndexSize, file);
 						Read(&data.m_weight, file);
@@ -510,7 +509,7 @@ namespace saba
 				else if (morph.m_morphType == PMXMorphType::Flip)
 				{
 					morph.m_flipMorph.resize(dataCount);
-					for (auto& data : morph.m_flipMorph)
+					for (auto &data : morph.m_flipMorph)
 					{
 						ReadIndex(&data.m_morphIndex, pmx->m_header.m_morphIndexSize, file);
 						Read(&data.m_weight, file);
@@ -519,7 +518,7 @@ namespace saba
 				else if (morph.m_morphType == PMXMorphType::Impluse)
 				{
 					morph.m_impulseMorph.resize(dataCount);
-					for (auto& data : morph.m_impulseMorph)
+					for (auto &data : morph.m_impulseMorph)
 					{
 						ReadIndex(&data.m_rigidbodyIndex, pmx->m_header.m_rigidbodyIndexSize, file);
 						Read(&data.m_localFlag, file);
@@ -537,7 +536,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadDisplayFrame(PMXFile* pmx, File& file)
+		bool ReadDisplayFrame(PMXFile *pmx, File &file)
 		{
 			int32_t displayFrameCount;
 			if (!Read(&displayFrameCount, file))
@@ -547,7 +546,7 @@ namespace saba
 
 			pmx->m_displayFrames.resize(displayFrameCount);
 
-			for (auto& displayFrame : pmx->m_displayFrames)
+			for (auto &displayFrame : pmx->m_displayFrames)
 			{
 				ReadString(pmx, &displayFrame.m_name, file);
 				ReadString(pmx, &displayFrame.m_englishName, file);
@@ -559,7 +558,7 @@ namespace saba
 					return false;
 				}
 				displayFrame.m_targets.resize(targetCount);
-				for (auto& target : displayFrame.m_targets)
+				for (auto &target : displayFrame.m_targets)
 				{
 					Read(&target.m_type, file);
 					if (target.m_type == PMXDisplayFrame::TargetType::BoneIndex)
@@ -580,7 +579,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadRigidbody(PMXFile* pmx, File& file)
+		bool ReadRigidbody(PMXFile *pmx, File &file)
 		{
 			int32_t rbCount;
 			if (!Read(&rbCount, file))
@@ -590,7 +589,7 @@ namespace saba
 
 			pmx->m_rigidbodies.resize(rbCount);
 
-			for (auto& rb : pmx->m_rigidbodies)
+			for (auto &rb : pmx->m_rigidbodies)
 			{
 				ReadString(pmx, &rb.m_name, file);
 				ReadString(pmx, &rb.m_englishName, file);
@@ -617,7 +616,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadJoint(PMXFile* pmx, File& file)
+		bool ReadJoint(PMXFile *pmx, File &file)
 		{
 			int32_t jointCount;
 			if (!Read(&jointCount, file))
@@ -627,7 +626,7 @@ namespace saba
 
 			pmx->m_joints.resize(jointCount);
 
-			for (auto& joint : pmx->m_joints)
+			for (auto &joint : pmx->m_joints)
 			{
 				ReadString(pmx, &joint.m_name, file);
 				ReadString(pmx, &joint.m_englishName, file);
@@ -651,7 +650,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadSoftbody(PMXFile* pmx, File& file)
+		bool ReadSoftbody(PMXFile *pmx, File &file)
 		{
 			int32_t sbCount;
 			if (!Read(&sbCount, file))
@@ -661,7 +660,7 @@ namespace saba
 
 			pmx->m_softbodies.resize(sbCount);
 
-			for (auto& sb : pmx->m_softbodies)
+			for (auto &sb : pmx->m_softbodies)
 			{
 				ReadString(pmx, &sb.m_name, file);
 				ReadString(pmx, &sb.m_englishName, file);
@@ -718,7 +717,7 @@ namespace saba
 					return false;
 				}
 				sb.m_anchorRigidbodies.resize(arCount);
-				for (auto& ar : sb.m_anchorRigidbodies)
+				for (auto &ar : sb.m_anchorRigidbodies)
 				{
 					ReadIndex(&ar.m_rigidBodyIndex, pmx->m_header.m_rigidbodyIndexSize, file);
 					ReadIndex(&ar.m_vertexIndex, pmx->m_header.m_vertexIndexSize, file);
@@ -731,7 +730,7 @@ namespace saba
 					return false;
 				}
 				sb.m_pinVertexIndices.resize(pvCount);
-				for (auto& pv : sb.m_pinVertexIndices)
+				for (auto &pv : sb.m_pinVertexIndices)
 				{
 					ReadIndex(&pv, pmx->m_header.m_vertexIndexSize, file);
 				}
@@ -740,7 +739,7 @@ namespace saba
 			return !file.IsBad();
 		}
 
-		bool ReadPMXFile(PMXFile * pmxFile, File& file)
+		bool ReadPMXFile(PMXFile *pmxFile, File &file)
 		{
 			if (!ReadHeader(pmxFile, file))
 			{
@@ -821,7 +820,7 @@ namespace saba
 		}
 	}
 
-	bool ReadPMXFile(PMXFile * pmxFile, const char* filename)
+	bool ReadPMXFile(PMXFile *pmxFile, const char *filename)
 	{
 		File file;
 		if (!file.Open(filename))
@@ -839,6 +838,5 @@ namespace saba
 
 		return true;
 	}
-
 
 }
