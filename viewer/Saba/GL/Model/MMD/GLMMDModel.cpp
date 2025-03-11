@@ -194,7 +194,7 @@ namespace saba
 		}
 
 		// Physicsを同期する
-		m_vmdAnim->SyncPhysics(float(m_animTime * 30.0), 30);
+		m_vmdAnim->SyncPhysics(float(m_animTime * 1), 1);
 
 		return true;
 	}
@@ -304,11 +304,6 @@ namespace saba
 			updatePhysicsAnimPerf.Stop();
 		}
 
-		// Update node animation (after physics animation)
-		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(true);
-		updateNodeAnimPerf.Stop();
-
 		// End animation
 		setupAnimPerf.Start();
 		m_mmdModel->EndAnimation();
@@ -359,11 +354,6 @@ namespace saba
 			m_mmdModel->UpdatePhysicsAnimation((float)elapsed);
 			updatePhysicsAnimPerf.Stop();
 		}
-
-		// Update node animation (after physics animation)
-		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(true);
-		updateNodeAnimPerf.Stop();
 
 		// End animation
 		setupAnimPerf.Start();

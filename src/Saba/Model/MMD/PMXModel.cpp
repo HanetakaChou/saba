@@ -52,11 +52,6 @@ namespace saba
 
 		BeginAnimation();
 
-		for (auto &node : (*m_nodeMan.GetNodes()))
-		{
-			node->UpdateLocalTransform();
-		}
-
 		for (auto &morph : (*m_morphMan.GetMorphs()))
 		{
 			morph->SetWeight(0);
@@ -100,7 +95,7 @@ namespace saba
 
 		EndAnimation();
 
-		ResetPhysics();
+		// ResetPhysics();
 	}
 
 	void PMXModel::BeginAnimation()
@@ -146,42 +141,18 @@ namespace saba
 		{
 			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
 			{
-				continue;
-			}
-
-			pmxNode->UpdateLocalTransform();
-		}
-
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
-				continue;
-			}
-
-			if (pmxNode->GetParent() == nullptr)
-			{
-				pmxNode->UpdateGlobalTransform();
-			}
-		}
-
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
+				assert(false);
 				continue;
 			}
 
 			if (pmxNode->GetAppendNode() != nullptr)
 			{
 				pmxNode->UpdateAppendTransform();
-				pmxNode->UpdateGlobalTransform();
 			}
+
 			if (pmxNode->GetIKSolver() != nullptr)
 			{
-				auto ikSolver = pmxNode->GetIKSolver();
-				ikSolver->Solve();
-				pmxNode->UpdateGlobalTransform();
+				pmxNode->GetIKSolver()->Solve();
 			}
 		}
 
@@ -189,6 +160,7 @@ namespace saba
 		{
 			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
 			{
+				assert(false);
 				continue;
 			}
 
@@ -212,7 +184,7 @@ namespace saba
 		auto rigidbodys = physicsMan->GetRigidBodys();
 		for (auto &rb : (*rigidbodys))
 		{
-			rb->SetActivation(false);
+			rb->SetActivation(false, physics, 1.0F);
 			rb->ResetTransform();
 		}
 
@@ -220,7 +192,7 @@ namespace saba
 
 		for (auto &rb : (*rigidbodys))
 		{
-			rb->ReflectGlobalTransform();
+			rb->ReflectGlobalTransform(*physics);
 		}
 
 		for (auto &rb : (*rigidbodys))
@@ -255,14 +227,14 @@ namespace saba
 		auto rigidbodys = physicsMan->GetRigidBodys();
 		for (auto &rb : (*rigidbodys))
 		{
-			rb->SetActivation(true);
+			rb->SetActivation(true, physics, elapsed);
 		}
 
 		physics->Update(elapsed);
 
 		for (auto &rb : (*rigidbodys))
 		{
-			rb->ReflectGlobalTransform();
+			rb->ReflectGlobalTransform(*physics);
 		}
 
 		for (auto &rb : (*rigidbodys))
@@ -637,7 +609,14 @@ namespace saba
 
 			node->SetDeformDepth(bone.m_deformDepth);
 			bool deformAfterPhysics = !!((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::DeformAfterPhysics);
-			node->EnableDeformAfterPhysics(deformAfterPhysics);
+			if (deformAfterPhysics)
+			{
+				node->EnableDeformAfterPhysics(deformAfterPhysics);
+			}
+			else
+			{
+				node->EnableDeformAfterPhysics(deformAfterPhysics);
+			}
 			bool appendRotate = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendRotate) != 0;
 			bool appendTranslate = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendTranslate) != 0;
 			node->EnableAppendRotate(appendRotate);
@@ -850,16 +829,19 @@ namespace saba
 		for (const auto &pmxRB : pmx.m_rigidbodies)
 		{
 			auto rb = m_physicsMan.AddRigidBody();
+
 			MMDNode *node = nullptr;
 			if (pmxRB.m_boneIndex != -1)
 			{
 				node = m_nodeMan.GetMMDNode(pmxRB.m_boneIndex);
 			}
-			if (!rb->Create(pmxRB, this, node))
+
+			if (!rb->Create(*m_physicsMan.GetMMDPhysics(), pmxRB, this, node))
 			{
 				SABA_ERROR("Create Rigid Body Fail.\n");
 				return false;
 			}
+
 			m_physicsMan.GetMMDPhysics()->AddRigidBody(rb);
 		}
 
@@ -873,6 +855,7 @@ namespace saba
 				MMDNode *node = nullptr;
 				auto rigidBodys = m_physicsMan.GetRigidBodys();
 				bool ret = joint->CreateJoint(
+					*m_physicsMan.GetMMDPhysics(),
 					pmxJoint,
 					(*rigidBodys)[pmxJoint.m_rigidbodyAIndex].get(),
 					(*rigidBodys)[pmxJoint.m_rigidbodyBIndex].get());
@@ -889,7 +872,7 @@ namespace saba
 			}
 		}
 
-		ResetPhysics();
+		// ResetPhysics();
 
 		SetupParallelUpdate();
 
@@ -1317,91 +1300,77 @@ namespace saba
 
 		if (m_isAppendRotate)
 		{
-			glm::quat appendRotate;
-			if (m_isAppendLocal)
+			std::vector<PMXNode *> ancestors;
+			ancestors.push_back(this);
+			if (!m_isAppendLocal)
 			{
-				appendRotate = m_appendNode->AnimateRotate();
+				PMXNode *current = m_appendNode;
+				while (current != nullptr)
+				{
+					ancestors.push_back(current);
+					current = current->GetAppendNode();
+				}
 			}
 			else
 			{
-				if (m_appendNode->GetAppendNode() != nullptr)
-				{
-					appendRotate = m_appendNode->GetAppendRotate();
-				}
-				else
-				{
-					appendRotate = m_appendNode->AnimateRotate();
-				}
+				ancestors.push_back(m_appendNode);
 			}
 
-			if (m_appendNode->m_enableIK)
+			assert(!ancestors.empty());
+
+			glm::quat append_rotate = ancestors.back()->AnimateRotate();
+			ancestors.pop_back();
+
+			while (!ancestors.empty())
 			{
-				appendRotate = m_appendNode->GetIKRotate() * appendRotate;
+				append_rotate = glm::slerp(glm::quat(1, 0, 0, 0), append_rotate, ancestors.back()->GetAppendWeight());
+				ancestors.pop_back();
 			}
 
-			glm::quat appendQ = glm::slerp(
-				glm::quat(1, 0, 0, 0),
-				appendRotate,
-				GetAppendWeight());
-			m_appendRotate = appendQ;
+			m_rotate = (m_rotate * append_rotate);
 		}
 
 		if (m_isAppendTranslate)
 		{
-			glm::vec3 appendTranslate(0.0f);
-			if (m_isAppendLocal)
+			assert(false);
+
+			std::vector<PMXNode *> ancestors;
+			ancestors.push_back(this);
+			if (!m_isAppendLocal)
 			{
-				appendTranslate = m_appendNode->GetTranslate() - m_appendNode->GetInitialTranslate();
+				PMXNode *current = m_appendNode;
+				while (current != nullptr)
+				{
+					ancestors.push_back(current);
+					current = current->GetAppendNode();
+				}
 			}
 			else
 			{
-				if (m_appendNode->GetAppendNode() != nullptr)
-				{
-					appendTranslate = m_appendNode->GetAppendTranslate();
-				}
-				else
-				{
-					appendTranslate = m_appendNode->GetTranslate() - m_appendNode->GetInitialTranslate();
-				}
+				ancestors.push_back(m_appendNode);
 			}
 
-			m_appendTranslate = appendTranslate * GetAppendWeight();
-		}
+			assert(!ancestors.empty());
 
-		UpdateLocalTransform();
+			glm::vec3 append_translate = ancestors.back()->GetTranslate() - ancestors.back()->GetInitialTranslate();
+			ancestors.pop_back();
+
+			while (!ancestors.empty())
+			{
+				append_translate = append_translate * GetAppendWeight();
+				ancestors.pop_back();
+			}
+
+			m_translate = (m_translate + append_translate);
+		}
 	}
 
 	void PMXNode::OnBeginUpdateTransform()
 	{
-		m_appendTranslate = glm::vec3(0);
-		m_appendRotate = glm::quat(1, 0, 0, 0);
 	}
 
 	void PMXNode::OnEndUpdateTransfrom()
 	{
-	}
-
-	void PMXNode::OnUpdateLocalTransform()
-	{
-		glm::vec3 t = AnimateTranslate();
-		if (m_isAppendTranslate)
-		{
-			t += m_appendTranslate;
-		}
-
-		glm::quat r = AnimateRotate();
-		if (m_enableIK)
-		{
-			r = GetIKRotate() * r;
-		}
-		if (m_isAppendRotate)
-		{
-			r = r * m_appendRotate;
-		}
-
-		glm::vec3 s = GetScale();
-
-		m_local = glm::translate(glm::mat4(1), t) * glm::mat4_cast(r) * glm::scale(glm::mat4(1), s);
 	}
 
 	PMXModel::MaterialFactor::MaterialFactor(const saba::PMXMorph::MaterialMorph &pmxMat)

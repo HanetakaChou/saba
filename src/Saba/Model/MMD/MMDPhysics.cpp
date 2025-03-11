@@ -11,50 +11,64 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <btBulletCollisionCommon.h>
-#include <btBulletDynamicsCommon.h>
+#include <DirectXMath.h>
+
+static inline void *_internal_dynamic_link_open(wchar_t const *filename);
+static inline void *_internal_dynamic_link_symbol(void *handle, char const *symbol);
+
+#ifndef NDEBUG
+void *const mcrt_malloc_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Havok-Wrapper/build-windows/bin/Win32/Debug/McRT-Malloc");
+void *const jph_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Havok-Wrapper/build-windows/bin/Win32/Debug/BRX-Physics-BT");
+#else
+void *const mcrt_malloc_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Havok-Wrapper/build-windows/bin/Win32/Release/McRT-Malloc");
+void *const jph_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Havok-Wrapper/build-windows/bin/Win32/Release/BRX-Physics-BT");
+#endif
+decltype(brx_physics_create_context) *const jph_physics_create_context = reinterpret_cast<decltype(brx_physics_create_context) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_create_context"));
+decltype(brx_physics_destory_context) *const jph_physics_destory_context = reinterpret_cast<decltype(brx_physics_destory_context) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_destory_context"));
+decltype(brx_physics_create_world) *const jph_physics_create_world = reinterpret_cast<decltype(brx_physics_create_world) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_create_world"));
+decltype(brx_physics_destory_world) *const jph_physics_destory_world = reinterpret_cast<decltype(brx_physics_destory_world) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_destory_world"));
+decltype(brx_physics_world_add_rigid_body) *const jph_physics_world_add_rigid_body = reinterpret_cast<decltype(brx_physics_world_add_rigid_body) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_world_add_rigid_body"));
+decltype(brx_physics_world_remove_rigid_body) *const jph_physics_world_remove_rigid_body = reinterpret_cast<decltype(brx_physics_world_remove_rigid_body) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_world_remove_rigid_body"));
+decltype(brx_physics_world_add_constraint) *const jph_physics_world_add_constraint = reinterpret_cast<decltype(brx_physics_world_add_constraint) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_world_add_constraint"));
+decltype(brx_physics_world_remove_constraint) *const jph_physics_world_remove_constraint = reinterpret_cast<decltype(brx_physics_world_remove_constraint) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_world_remove_constraint"));
+decltype(brx_physics_world_step) *const jph_physics_world_step = reinterpret_cast<decltype(brx_physics_world_step) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_world_step"));
+decltype(brx_physics_create_rigid_body) *const jph_physics_create_rigid_body = reinterpret_cast<decltype(brx_physics_create_rigid_body) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_create_rigid_body"));
+decltype(brx_physics_destory_rigid_body) *const jph_physics_destory_rigid_body = reinterpret_cast<decltype(brx_physics_destory_rigid_body) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_destory_rigid_body"));
+decltype(brx_physics_rigid_body_apply_key_frame) *const jph_physics_rigid_body_apply_key_frame = reinterpret_cast<decltype(brx_physics_rigid_body_apply_key_frame) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_rigid_body_apply_key_frame"));
+decltype(brx_physics_rigid_body_get_transform) *const jph_physics_rigid_body_get_transform = reinterpret_cast<decltype(brx_physics_rigid_body_get_transform) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_rigid_body_get_transform"));
+decltype(brx_physics_create_constraint) *const jph_physics_create_constraint = reinterpret_cast<decltype(brx_physics_create_constraint) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_create_constraint"));
+decltype(brx_physics_destory_constraint) *const jph_physics_destory_constraint = reinterpret_cast<decltype(brx_physics_destory_constraint) *>(_internal_dynamic_link_symbol(jph_dynamic_link_handle, "brx_physics_destory_constraint"));
+
+static inline float internal_asin(float y, float z)
+{
+	constexpr float const INTERNAL_EPSILON = 1E-6F;
+
+	assert(z > INTERNAL_EPSILON);
+
+	if (std::abs(y) < INTERNAL_EPSILON)
+	{
+		return 0.0F;
+	}
+	else
+	{
+		float const sin = (y / z);
+		return DirectX::XMScalarASin(sin);
+	}
+}
 
 namespace saba
 {
-	class MMDMotionState : public btMotionState
-	{
-	public:
-		virtual void Reset() = 0;
-		virtual void ReflectGlobalTransform() = 0;
-	};
-
 	namespace
 	{
 		glm::mat4 InvZ(const glm::mat4 &m)
 		{
 			const glm::mat4 invZ = glm::scale(glm::mat4(1), glm::vec3(1, 1, -1));
-			return invZ * m * invZ;
+			glm::mat4 result = invZ * m * invZ;
+			return result;
 		}
 	}
 
-	struct MMDFilterCallback : public btOverlapFilterCallback
-	{
-		bool needBroadphaseCollision(btBroadphaseProxy *proxy0, btBroadphaseProxy *proxy1) const override
-		{
-			auto findIt = std::find_if(
-				m_nonFilterProxy.begin(),
-				m_nonFilterProxy.end(),
-				[proxy0, proxy1](const auto &x)
-				{ return x == proxy0 || x == proxy1; });
-			if (findIt != m_nonFilterProxy.end())
-			{
-				return true;
-			}
-			bool collides = (proxy0->m_collisionFilterGroup & proxy1->m_collisionFilterMask) != 0;
-			collides = collides && (proxy1->m_collisionFilterGroup & proxy0->m_collisionFilterMask);
-			return collides;
-		}
-
-		std::vector<btBroadphaseProxy *> m_nonFilterProxy;
-	};
-
-	MMDPhysics::MMDPhysics()
-		: m_fps(120.0f), m_maxSubStepCount(10)
+	MMDPhysics::MMDPhysics() : m_jph_physics_context(NULL), m_jph_physics_world(NULL)
 	{
 	}
 
@@ -65,550 +79,231 @@ namespace saba
 
 	bool MMDPhysics::Create()
 	{
-		m_broadphase = std::make_unique<btDbvtBroadphase>();
-		m_collisionConfig = std::make_unique<btDefaultCollisionConfiguration>();
-		m_dispatcher = std::make_unique<btCollisionDispatcher>(m_collisionConfig.get());
+		float gravity[3] = {0, -9.8F * 10.0F, 0};
 
-		m_solver = std::make_unique<btSequentialImpulseConstraintSolver>();
-
-		m_world = std::make_unique<btDiscreteDynamicsWorld>(
-			m_dispatcher.get(),
-			m_broadphase.get(),
-			m_solver.get(),
-			m_collisionConfig.get());
-
-		m_world->setGravity(btVector3(0, -9.8f * 10.0f, 0));
-
-		m_groundShape = std::make_unique<btStaticPlaneShape>(btVector3(0, 1, 0), 0.0f);
-
-		btTransform groundTransform;
-		groundTransform.setIdentity();
-
-		m_groundMS = std::make_unique<btDefaultMotionState>(groundTransform);
-
-		btRigidBody::btRigidBodyConstructionInfo groundInfo(0, m_groundMS.get(), m_groundShape.get(), btVector3(0, 0, 0));
-		m_groundRB = std::make_unique<btRigidBody>(groundInfo);
-
-		m_world->addRigidBody(m_groundRB.get());
-
-		auto filterCB = std::make_unique<MMDFilterCallback>();
-		filterCB->m_nonFilterProxy.push_back(m_groundRB->getBroadphaseProxy());
-		m_world->getPairCache()->setOverlapFilterCallback(filterCB.get());
-		m_filterCB = std::move(filterCB);
+		assert(NULL == m_jph_physics_context);
+		assert(NULL == m_jph_physics_world);
+		m_jph_physics_context = jph_physics_create_context();
+		m_jph_physics_world = jph_physics_create_world(m_jph_physics_context, gravity);
 
 		return true;
 	}
 
 	void MMDPhysics::Destroy()
 	{
-		if (m_world != nullptr && m_groundRB != nullptr)
-		{
-			m_world->removeRigidBody(m_groundRB.get());
-		}
-
-		m_broadphase = nullptr;
-		m_collisionConfig = nullptr;
-		m_dispatcher = nullptr;
-		m_solver = nullptr;
-		m_world = nullptr;
-		m_groundShape = nullptr;
-		m_groundMS = nullptr;
-		m_groundRB = nullptr;
+		assert(NULL != m_jph_physics_context);
+		assert(NULL != m_jph_physics_world);
+		jph_physics_destory_world(m_jph_physics_context, m_jph_physics_world);
+		jph_physics_destory_context(m_jph_physics_context);
+		m_jph_physics_context = NULL;
+		m_jph_physics_world = NULL;
 	}
 
-	void MMDPhysics::SetFPS(float fps)
+	void MMDPhysics::SetFPS(float)
 	{
-		m_fps = fps;
+		assert(false);
 	}
 
 	float MMDPhysics::GetFPS() const
 	{
-		return static_cast<float>(m_fps);
+		return 120.0F;
 	}
 
-	void MMDPhysics::SetMaxSubStepCount(int numSteps)
+	void MMDPhysics::SetMaxSubStepCount(int)
 	{
-		m_maxSubStepCount = numSteps;
+		assert(false);
 	}
 
 	int MMDPhysics::GetMaxSubStepCount() const
 	{
-		return m_maxSubStepCount;
+		return 10;
 	}
 
 	void MMDPhysics::Update(float time)
 	{
-		if (m_world != nullptr)
+		if (NULL != m_jph_physics_world)
 		{
-			m_world->stepSimulation(time, m_maxSubStepCount, static_cast<btScalar>(1.0 / m_fps));
+			jph_physics_world_step(m_jph_physics_context, m_jph_physics_world, time);
 		}
 	}
 
 	void MMDPhysics::AddRigidBody(MMDRigidBody *mmdRB)
 	{
-		m_world->addRigidBody(
-			mmdRB->GetRigidBody(),
-			1 << mmdRB->GetGroup(),
-			mmdRB->GetGroupMask());
+		jph_physics_world_add_rigid_body(m_jph_physics_context, m_jph_physics_world, mmdRB->m_jph_physics_rigid_body);
 	}
 
 	void MMDPhysics::RemoveRigidBody(MMDRigidBody *mmdRB)
 	{
-		m_world->removeRigidBody(mmdRB->GetRigidBody());
+		jph_physics_world_remove_rigid_body(m_jph_physics_context, m_jph_physics_world, mmdRB->m_jph_physics_rigid_body);
 	}
 
 	void MMDPhysics::AddJoint(MMDJoint *mmdJoint)
 	{
-		if (mmdJoint->GetConstraint() != nullptr)
-		{
-			m_world->addConstraint(mmdJoint->GetConstraint());
-		}
+		jph_physics_world_add_constraint(m_jph_physics_context, m_jph_physics_world, mmdJoint->m_jph_physics_constraint);
 	}
 
 	void MMDPhysics::RemoveJoint(MMDJoint *mmdJoint)
 	{
-		if (mmdJoint->GetConstraint() != nullptr)
-		{
-			m_world->removeConstraint(mmdJoint->GetConstraint());
-		}
-	}
-
-	btDiscreteDynamicsWorld *MMDPhysics::GetDynamicsWorld() const
-	{
-		return m_world.get();
+		jph_physics_world_remove_constraint(m_jph_physics_context, m_jph_physics_world, mmdJoint->m_jph_physics_constraint);
 	}
 
 	//*******************
 	// MMDRigidBody
 	//*******************
 
-	class DefaultMotionState : public MMDMotionState
-	{
-	public:
-		DefaultMotionState(const glm::mat4 &transform)
-		{
-			glm::mat4 trans = InvZ(transform);
-			m_transform.setFromOpenGLMatrix(&trans[0][0]);
-			m_initialTransform = m_transform;
-		}
-
-		void getWorldTransform(btTransform &worldTransform) const override
-		{
-			worldTransform = m_transform;
-		}
-
-		void setWorldTransform(const btTransform &worldTransform) override
-		{
-			m_transform = worldTransform;
-		}
-
-		virtual void Reset() override
-		{
-			m_transform = m_initialTransform;
-		}
-
-		virtual void ReflectGlobalTransform() override
-		{
-		}
-
-	private:
-		btTransform m_initialTransform;
-		btTransform m_transform;
-	};
-
-	class DynamicMotionState : public MMDMotionState
-	{
-	public:
-		DynamicMotionState(MMDNode *node, const glm::mat4 &offset, bool override = true)
-			: m_node(node), m_offset(offset), m_override(override)
-		{
-			m_invOffset = glm::inverse(offset);
-			Reset();
-		}
-
-		void getWorldTransform(btTransform &worldTransform) const override
-		{
-			worldTransform = m_transform;
-		}
-
-		void setWorldTransform(const btTransform &worldTransform) override
-		{
-			m_transform = worldTransform;
-		}
-
-		void Reset() override
-		{
-			glm::mat4 global = InvZ(m_node->GetGlobalTransform() * m_offset);
-			m_transform.setFromOpenGLMatrix(&global[0][0]);
-		}
-
-		void ReflectGlobalTransform() override
-		{
-			alignas(16) glm::mat4 world;
-			m_transform.getOpenGLMatrix(&world[0][0]);
-			glm::mat4 btGlobal = InvZ(world) * m_invOffset;
-
-			if (m_override)
-			{
-				m_node->SetGlobalTransform(btGlobal);
-				m_node->UpdateChildTransform();
-			}
-		}
-
-	private:
-		MMDNode *m_node;
-		glm::mat4 m_offset;
-		glm::mat4 m_invOffset;
-		btTransform m_transform;
-		bool m_override;
-	};
-
-	class DynamicAndBoneMergeMotionState : public MMDMotionState
-	{
-	public:
-		DynamicAndBoneMergeMotionState(MMDNode *node, const glm::mat4 &offset, bool override = true)
-			: m_node(node), m_offset(offset), m_override(override)
-		{
-			m_invOffset = glm::inverse(offset);
-			Reset();
-		}
-
-		void getWorldTransform(btTransform &worldTransform) const override
-		{
-			worldTransform = m_transform;
-		}
-
-		void setWorldTransform(const btTransform &worldTransform) override
-		{
-			m_transform = worldTransform;
-		}
-
-		void Reset() override
-		{
-			glm::mat4 global = InvZ(m_node->GetGlobalTransform() * m_offset);
-			m_transform.setFromOpenGLMatrix(&global[0][0]);
-		}
-
-		void ReflectGlobalTransform() override
-		{
-			alignas(16) glm::mat4 world;
-			m_transform.getOpenGLMatrix(&world[0][0]);
-			glm::mat4 btGlobal = InvZ(world) * m_invOffset;
-			glm::mat4 global = m_node->GetGlobalTransform();
-			btGlobal[3] = global[3];
-
-			if (m_override)
-			{
-				m_node->SetGlobalTransform(btGlobal);
-				m_node->UpdateChildTransform();
-			}
-		}
-
-	private:
-		MMDNode *m_node;
-		glm::mat4 m_offset;
-		glm::mat4 m_invOffset;
-		btTransform m_transform;
-		bool m_override;
-	};
-
-	class KinematicMotionState : public MMDMotionState
-	{
-	public:
-		KinematicMotionState(MMDNode *node, const glm::mat4 &offset)
-			: m_node(node), m_offset(offset)
-		{
-		}
-
-		void getWorldTransform(btTransform &worldTransform) const override
-		{
-			glm::mat4 m;
-			if (m_node != nullptr)
-			{
-				m = m_node->GetGlobalTransform() * m_offset;
-			}
-			else
-			{
-				m = m_offset;
-			}
-			m = InvZ(m);
-			worldTransform.setFromOpenGLMatrix(&m[0][0]);
-		}
-
-		void setWorldTransform(const btTransform &worldTransform) override
-		{
-		}
-
-		void Reset() override
-		{
-		}
-
-		void ReflectGlobalTransform() override
-		{
-		}
-
-	private:
-		MMDNode *m_node;
-		glm::mat4 m_offset;
-	};
-
-	MMDRigidBody::MMDRigidBody()
-		: m_rigidBodyType(RigidBodyType::Kinematic), m_group(0), m_groupMask(0), m_node(0), m_offsetMat(1)
+	MMDRigidBody::MMDRigidBody() : m_rigidBodyType(RigidBodyType::Kinematic), m_group(0), m_groupMask(0), m_node(0), m_root(0), m_offsetMat(1), m_jph_physics_rigid_body(NULL)
 	{
 	}
 
 	MMDRigidBody::~MMDRigidBody()
 	{
+		assert(NULL == m_jph_physics_rigid_body);
 	}
 
 	bool MMDRigidBody::Create(const PMDRigidBodyExt &pmdRigidBody, MMDModel *model, MMDNode *node)
 	{
-		Destroy();
-
-		switch (pmdRigidBody.m_shapeType)
-		{
-		case PMDRigidBodyShape::Sphere:
-			m_shape = std::make_unique<btSphereShape>(pmdRigidBody.m_shapeWidth);
-			break;
-		case PMDRigidBodyShape::Box:
-			m_shape = std::make_unique<btBoxShape>(btVector3(
-				pmdRigidBody.m_shapeWidth,
-				pmdRigidBody.m_shapeHeight,
-				pmdRigidBody.m_shapeDepth));
-			break;
-		case PMDRigidBodyShape::Capsule:
-			m_shape = std::make_unique<btCapsuleShape>(
-				pmdRigidBody.m_shapeWidth,
-				pmdRigidBody.m_shapeHeight);
-			break;
-		default:
-			break;
-		}
-		if (m_shape == nullptr)
-		{
-			return false;
-		}
-
-		btScalar mass(0.0f);
-		btVector3 localInteria(0, 0, 0);
-		if (pmdRigidBody.m_rigidBodyType != PMDRigidBodyOperation::Static)
-		{
-			mass = pmdRigidBody.m_rigidBodyWeight;
-		}
-		if (mass != 0)
-		{
-			m_shape->calculateLocalInertia(mass, localInteria);
-		}
-
-		auto rx = glm::rotate(glm::mat4(1), pmdRigidBody.m_rot.x, glm::vec3(1, 0, 0));
-		auto ry = glm::rotate(glm::mat4(1), pmdRigidBody.m_rot.y, glm::vec3(0, 1, 0));
-		auto rz = glm::rotate(glm::mat4(1), pmdRigidBody.m_rot.z, glm::vec3(0, 0, 1));
-		glm::mat4 rotMat = ry * rx * rz;
-		glm::mat4 translateMat = glm::translate(glm::mat4(1), pmdRigidBody.m_pos);
-
-		glm::mat4 rbMat = translateMat * rotMat;
-		if (node != nullptr)
-		{
-			glm::mat4 global = node->GetGlobalTransform();
-			rbMat = InvZ(global) * rbMat;
-		}
-		else
-		{
-			MMDNode *root = model->GetNodeManager()->GetMMDNode(0);
-			glm::mat4 global = root->GetGlobalTransform();
-			rbMat = InvZ(global) * rbMat;
-		}
-		rbMat = InvZ(rbMat);
-
-		if (node != nullptr)
-		{
-			m_offsetMat = glm::inverse(node->GetGlobalTransform()) * rbMat;
-		}
-		else
-		{
-			MMDNode *root = model->GetNodeManager()->GetMMDNode(0);
-			m_offsetMat = glm::inverse(root->GetGlobalTransform()) * rbMat;
-		}
-
-		btMotionState *motionState = nullptr;
-		MMDNode *kinematicNode = nullptr;
-		bool overrideNode = true;
-		if (node != nullptr)
-		{
-			kinematicNode = node;
-		}
-		else
-		{
-			kinematicNode = model->GetNodeManager()->GetMMDNode(0);
-			overrideNode = false;
-		}
-		if (pmdRigidBody.m_rigidBodyType == PMDRigidBodyOperation::Static)
-		{
-			m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-			motionState = m_kinematicMotionState.get();
-		}
-		else if (pmdRigidBody.m_rigidBodyType == PMDRigidBodyOperation::Dynamic)
-		{
-			m_activeMotionState = std::make_unique<DynamicMotionState>(kinematicNode, m_offsetMat, overrideNode);
-			m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-			motionState = m_activeMotionState.get();
-		}
-		else if (pmdRigidBody.m_rigidBodyType == PMDRigidBodyOperation::DynamicAdjustBone)
-		{
-			m_activeMotionState = std::make_unique<DynamicAndBoneMergeMotionState>(kinematicNode, m_offsetMat, overrideNode);
-			m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-			motionState = m_activeMotionState.get();
-		}
-
-		btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, motionState, m_shape.get(), localInteria);
-		rbInfo.m_linearDamping = pmdRigidBody.m_rigidBodyPosDimmer;
-		rbInfo.m_angularDamping = pmdRigidBody.m_rigidBodyRotDimmer;
-		rbInfo.m_restitution = pmdRigidBody.m_rigidBodyRecoil;
-		rbInfo.m_friction = pmdRigidBody.m_rigidBodyFriction;
-		rbInfo.m_additionalDamping = true;
-
-		m_rigidBody = std::make_unique<btRigidBody>(rbInfo);
-		m_rigidBody->setUserPointer(this);
-		m_rigidBody->setSleepingThresholds(0.01f, glm::radians(0.1f));
-		m_rigidBody->setActivationState(DISABLE_DEACTIVATION);
-		if (pmdRigidBody.m_rigidBodyType == PMDRigidBodyOperation::Static)
-		{
-			m_rigidBody->setCollisionFlags(m_rigidBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-		}
-
-		m_rigidBodyType = (RigidBodyType)pmdRigidBody.m_rigidBodyType;
-		m_group = pmdRigidBody.m_groupIndex;
-		m_groupMask = pmdRigidBody.m_groupTarget;
-		m_node = node;
-		m_name = pmdRigidBody.m_rigidBodyName.ToUtf8String();
-
-		return true;
+		assert(false);
+		return false;
 	}
 
-	bool MMDRigidBody::Create(const PMXRigidbody &pmxRigidBody, MMDModel *model, MMDNode *node)
+	bool MMDRigidBody::Create(const MMDPhysics &physics, const PMXRigidbody &pmxRigidBody, MMDModel *model, MMDNode *node)
 	{
-		Destroy();
+		assert(NULL == m_jph_physics_rigid_body);
 
-		switch (pmxRigidBody.m_shape)
+		glm::mat4 physics_world_transform;
 		{
-		case PMXRigidbody::Shape::Sphere:
-			m_shape = std::make_unique<btSphereShape>(pmxRigidBody.m_shapeSize.x);
-			break;
-		case PMXRigidbody::Shape::Box:
-			m_shape = std::make_unique<btBoxShape>(btVector3(
-				pmxRigidBody.m_shapeSize.x,
-				pmxRigidBody.m_shapeSize.y,
-				pmxRigidBody.m_shapeSize.z));
-			break;
-		case PMXRigidbody::Shape::Capsule:
-			m_shape = std::make_unique<btCapsuleShape>(
-				pmxRigidBody.m_shapeSize.x,
-				pmxRigidBody.m_shapeSize.y);
-			break;
-		default:
-			break;
-		}
-		if (m_shape == nullptr)
-		{
-			return false;
+			// YXZ
+			// [FnRigidBody.new_rigid_body_object](https://github.com/MMD-Blender/blender_mmd_tools/blob/main/mmd_tools/core/rigid_body.py#L104)
+			glm::mat4 ry = glm::rotate(glm::mat4(1), pmxRigidBody.m_rotate.y, glm::vec3(0, 1, 0));
+			glm::mat4 rx = glm::rotate(glm::mat4(1), pmxRigidBody.m_rotate.x, glm::vec3(1, 0, 0));
+			glm::mat4 rz = glm::rotate(glm::mat4(1), pmxRigidBody.m_rotate.z, glm::vec3(0, 0, 1));
+			glm::mat4 rotMat = ry * rx * rz;
+
+#if 0
+			glm::mat4 rotMat3 = glm::transpose(rotMat);
+
+			btMatrix3x3 rotMat2;
+			rotMat2.setEulerZYX(pmxRigidBody.m_rotate.x, pmxRigidBody.m_rotate.y, pmxRigidBody.m_rotate.z);
+
+			if (std::abs(rotMat2[0].getX() - rotMat3[0].x) > 1E-6F
+				|| std::abs(rotMat2[0].getY() - rotMat3[0].y) > 1E-6F
+				|| std::abs(rotMat2[0].getZ() - rotMat3[0].z) > 1E-6F
+				|| std::abs(rotMat2[1].getX() - rotMat3[1].x) > 1E-6F
+				|| std::abs(rotMat2[1].getY() - rotMat3[1].y) > 1E-6F
+				|| std::abs(rotMat2[1].getZ() - rotMat3[1].z) > 1E-6F
+				|| std::abs(rotMat2[2].getX() - rotMat3[2].x) > 1E-6F
+				|| std::abs(rotMat2[2].getY() - rotMat3[2].y) > 1E-6F
+				|| std::abs(rotMat2[2].getZ() - rotMat3[2].z) > 1E-6F
+				)
+			{
+				assert(false);
+			}
+#endif
+
+			glm::mat4 translateMat = glm::translate(glm::mat4(1), pmxRigidBody.m_translate);
+
+			physics_world_transform = translateMat * rotMat;
 		}
 
-		btScalar mass(0.0f);
-		btVector3 localInteria(0, 0, 0);
-		if (pmxRigidBody.m_op != PMXRigidbody::Operation::Static)
-		{
-			mass = pmxRigidBody.m_mass;
-		}
-		if (mass != 0)
-		{
-			m_shape->calculateLocalInertia(mass, localInteria);
-		}
+		m_initialMat = InvZ(physics_world_transform);
 
-		auto rx = glm::rotate(glm::mat4(1), pmxRigidBody.m_rotate.x, glm::vec3(1, 0, 0));
-		auto ry = glm::rotate(glm::mat4(1), pmxRigidBody.m_rotate.y, glm::vec3(0, 1, 0));
-		auto rz = glm::rotate(glm::mat4(1), pmxRigidBody.m_rotate.z, glm::vec3(0, 0, 1));
-		glm::mat4 rotMat = ry * rx * rz;
-		glm::mat4 translateMat = glm::translate(glm::mat4(1), pmxRigidBody.m_translate);
-
-		glm::mat4 rbMat = InvZ(translateMat * rotMat);
-
-		MMDNode *kinematicNode = nullptr;
+		assert(nullptr == m_node);
+		assert(nullptr == m_root);
 		if (node != nullptr)
 		{
-			m_offsetMat = glm::inverse(node->GetGlobalTransform()) * rbMat;
-			kinematicNode = node;
+			m_node = node;
+			m_offsetMat = glm::inverse(node->GetGlobalTransform()) * m_initialMat;
 		}
 		else
 		{
-			MMDNode *root = model->GetNodeManager()->GetMMDNode(0);
-			m_offsetMat = glm::inverse(root->GetGlobalTransform()) * rbMat;
-			kinematicNode = root;
+			m_root = model->GetNodeManager()->GetMMDNode(0);
+			m_offsetMat = glm::inverse(m_root->GetGlobalTransform()) * m_initialMat;
 		}
 
-		btMotionState *MMDMotionState = nullptr;
-		if (pmxRigidBody.m_op == PMXRigidbody::Operation::Static)
-		{
-			m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-			MMDMotionState = m_kinematicMotionState.get();
-		}
-		else
-		{
-			if (node != nullptr)
-			{
-				if (pmxRigidBody.m_op == PMXRigidbody::Operation::Dynamic)
-				{
-					m_activeMotionState = std::make_unique<DynamicMotionState>(kinematicNode, m_offsetMat);
-					m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-					MMDMotionState = m_activeMotionState.get();
-				}
-				else if (pmxRigidBody.m_op == PMXRigidbody::Operation::DynamicAndBoneMerge)
-				{
-					m_activeMotionState = std::make_unique<DynamicAndBoneMergeMotionState>(kinematicNode, m_offsetMat);
-					m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-					MMDMotionState = m_activeMotionState.get();
-				}
-			}
-			else
-			{
-				m_activeMotionState = std::make_unique<DefaultMotionState>(m_offsetMat);
-				m_kinematicMotionState = std::make_unique<KinematicMotionState>(kinematicNode, m_offsetMat);
-				MMDMotionState = m_activeMotionState.get();
-			}
-		}
-
-		btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, MMDMotionState, m_shape.get(), localInteria);
-		rbInfo.m_linearDamping = pmxRigidBody.m_translateDimmer;
-		rbInfo.m_angularDamping = pmxRigidBody.m_rotateDimmer;
-		rbInfo.m_restitution = pmxRigidBody.m_repulsion;
-		rbInfo.m_friction = pmxRigidBody.m_friction;
-		rbInfo.m_additionalDamping = true;
-
-		m_rigidBody = std::make_unique<btRigidBody>(rbInfo);
-		m_rigidBody->setUserPointer(this);
-		m_rigidBody->setSleepingThresholds(0.01f, glm::radians(0.1f));
-		m_rigidBody->setActivationState(DISABLE_DEACTIVATION);
-		if (pmxRigidBody.m_op == PMXRigidbody::Operation::Static)
-		{
-			m_rigidBody->setCollisionFlags(m_rigidBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-		}
+		m_invOffsetMat = glm::inverse(m_offsetMat);
 
 		m_rigidBodyType = (RigidBodyType)pmxRigidBody.m_op;
 		m_group = pmxRigidBody.m_group;
 		m_groupMask = pmxRigidBody.m_collisionGroup;
-		m_node = node;
 		m_name = pmxRigidBody.m_name;
+
+		BRX_PHYSICS_RIGID_BODY_SHAPE_TYPE brx_shape_type;
+		switch (pmxRigidBody.m_shape)
+		{
+		case PMXRigidbody::Shape::Sphere:
+			brx_shape_type = BRX_PHYSICS_RIGID_BODY_SHAPE_SPHERE;
+			break;
+		case PMXRigidbody::Shape::Box:
+			brx_shape_type = BRX_PHYSICS_RIGID_BODY_SHAPE_BOX;
+			break;
+		default:
+			assert(PMXRigidbody::Shape::Capsule == pmxRigidBody.m_shape);
+			brx_shape_type = BRX_PHYSICS_RIGID_BODY_SHAPE_CAPSULE;
+		}
+
+		float brx_rotation[4];
+		float brx_translation[3];
+		{
+			glm::vec3 translate = glm::vec3(physics_world_transform[3]);
+			brx_translation[0] = translate.x;
+			brx_translation[1] = translate.y;
+			brx_translation[2] = translate.z;
+
+			glm::vec3 scale = glm::vec3(
+				glm::length(glm::vec3(physics_world_transform[0])),
+				glm::length(glm::vec3(physics_world_transform[1])),
+				glm::length(glm::vec3(physics_world_transform[2])));
+			assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+			glm::quat rotate = glm::quat_cast(glm::mat3(
+				glm::vec3(physics_world_transform[0]) / scale.x,
+				glm::vec3(physics_world_transform[1]) / scale.y,
+				glm::vec3(physics_world_transform[2]) / scale.z));
+			brx_rotation[0] = rotate.x;
+			brx_rotation[1] = rotate.y;
+			brx_rotation[2] = rotate.z;
+			brx_rotation[3] = rotate.w;
+		}
+
+		float brx_shape_size[3];
+		{
+			brx_shape_size[0] = pmxRigidBody.m_shapeSize.x;
+			brx_shape_size[1] = pmxRigidBody.m_shapeSize.y;
+			brx_shape_size[2] = pmxRigidBody.m_shapeSize.z;
+		}
+
+		BRX_PHYSICS_RIGID_BODY_MOTION_TYPE brx_motion_type;
+		if (PMXRigidbody::Operation::Static == pmxRigidBody.m_op)
+		{
+			brx_motion_type = BRX_PHYSICS_RIGID_BODY_MOTION_KEYFRAME;
+		}
+		else
+		{
+			assert(PMXRigidbody::Operation::Dynamic == pmxRigidBody.m_op || PMXRigidbody::Operation::DynamicAndBoneMerge == pmxRigidBody.m_op);
+			brx_motion_type = BRX_PHYSICS_RIGID_BODY_MOTION_DYNAMIC;
+		}
+
+		float brx_mass = pmxRigidBody.m_mass;
+
+		float brx_linear_damping = pmxRigidBody.m_translateDimmer;
+		float brx_angular_damping = pmxRigidBody.m_rotateDimmer;
+		float brx_restitution = pmxRigidBody.m_repulsion;
+		float brx_friction = pmxRigidBody.m_friction;
+
+		assert(NULL == m_jph_physics_rigid_body);
+		m_jph_physics_rigid_body = jph_physics_create_rigid_body(physics.m_jph_physics_context, physics.m_jph_physics_world, brx_rotation, brx_translation, brx_shape_type, brx_shape_size, brx_motion_type, pmxRigidBody.m_group, pmxRigidBody.m_collisionGroup, brx_mass, brx_linear_damping, brx_angular_damping, brx_friction, brx_restitution);
 
 		return true;
 	}
 
-	void MMDRigidBody::Destroy()
+	void MMDRigidBody::Destroy(const MMDPhysics &physics)
 	{
-		m_shape = nullptr;
-	}
+		if (NULL != m_jph_physics_rigid_body)
+		{
+			jph_physics_destory_rigid_body(physics.m_jph_physics_context, physics.m_jph_physics_world, m_jph_physics_rigid_body);
 
-	btRigidBody *MMDRigidBody::GetRigidBody() const
-	{
-		return m_rigidBody.get();
+			m_jph_physics_rigid_body = NULL;
+		}
 	}
 
 	uint16_t MMDRigidBody::GetGroup() const
@@ -621,57 +316,220 @@ namespace saba
 		return m_groupMask;
 	}
 
-	void MMDRigidBody::SetActivation(bool activation)
+	void MMDRigidBody::Reset(MMDPhysics *physics)
 	{
-		if (m_rigidBodyType != RigidBodyType::Kinematic)
-		{
-			if (activation)
-			{
-				m_rigidBody->setCollisionFlags(m_rigidBody->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
-				m_rigidBody->setMotionState(m_activeMotionState.get());
-			}
-			else
-			{
-				m_rigidBody->setCollisionFlags(m_rigidBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-				m_rigidBody->setMotionState(m_kinematicMotionState.get());
-			}
-		}
-		else
-		{
-			m_rigidBody->setMotionState(m_kinematicMotionState.get());
-		}
+		assert(false);
 	}
 
 	void MMDRigidBody::ResetTransform()
 	{
-		if (m_activeMotionState != nullptr)
+		assert(false);
+
+#if 0
+		glm::mat4 mmd_world_transform = m_initialMat;
+
+		glm::mat4 physics_world_transform = InvZ(mmd_world_transform);
+
+		float brx_rotation[4];
+		float brx_translation[3];
 		{
-			m_activeMotionState->Reset();
+			glm::vec3 translate = glm::vec3(physics_world_transform[3]);
+			brx_translation[0] = translate.x;
+			brx_translation[1] = translate.y;
+			brx_translation[2] = translate.z;
+
+			glm::vec3 scale = glm::vec3(
+				glm::length(glm::vec3(physics_world_transform[0])),
+				glm::length(glm::vec3(physics_world_transform[1])),
+				glm::length(glm::vec3(physics_world_transform[2])));
+			assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+			glm::quat rotate = glm::quat_cast(glm::mat3(
+				glm::vec3(physics_world_transform[0]) / scale.x,
+				glm::vec3(physics_world_transform[1]) / scale.y,
+				glm::vec3(physics_world_transform[2]) / scale.z));
+			brx_rotation[0] = rotate.x;
+			brx_rotation[1] = rotate.y;
+			brx_rotation[2] = rotate.z;
+			brx_rotation[3] = rotate.w;
+		}
+
+		hk_physics_rigid_body_apply_key_frame(physics->m_hk_physics_context, physics->m_hk_physics_world, m_hk_physics_rigid_body, brx_rotation, brx_translation, time);
+
+		jph_physics_rigid_body_apply_key_frame(physics->m_jph_physics_context, physics->m_jph_physics_world, m_jph_physics_rigid_body, brx_rotation, brx_translation, time);
+#endif
+	}
+
+	void MMDRigidBody::SetActivation(bool activation, MMDPhysics *physics, float time)
+	{
+		if (activation)
+		{
+			// skeleton map: animation to ragdoll
+
+			if (m_rigidBodyType == RigidBodyType::Kinematic)
+			{
+				glm::mat4 mmd_world_transform = ((nullptr != m_node) ? m_node->GetGlobalTransform() : m_root->GetGlobalTransform()) * m_offsetMat;
+
+				glm::mat4 physics_world_transform = InvZ(mmd_world_transform);
+
+				float brx_rotation[4];
+				float brx_translation[3];
+				{
+					glm::vec3 translate = glm::vec3(physics_world_transform[3]);
+					brx_translation[0] = translate.x;
+					brx_translation[1] = translate.y;
+					brx_translation[2] = translate.z;
+
+					glm::vec3 scale = glm::vec3(
+						glm::length(glm::vec3(physics_world_transform[0])),
+						glm::length(glm::vec3(physics_world_transform[1])),
+						glm::length(glm::vec3(physics_world_transform[2])));
+					assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+					glm::quat rotate = glm::quat_cast(glm::mat3(
+						glm::vec3(physics_world_transform[0]) / scale.x,
+						glm::vec3(physics_world_transform[1]) / scale.y,
+						glm::vec3(physics_world_transform[2]) / scale.z));
+					brx_rotation[0] = rotate.x;
+					brx_rotation[1] = rotate.y;
+					brx_rotation[2] = rotate.z;
+					brx_rotation[3] = rotate.w;
+				}
+
+				jph_physics_rigid_body_apply_key_frame(physics->m_jph_physics_context, physics->m_jph_physics_world, m_jph_physics_rigid_body, brx_rotation, brx_translation, time);
+			}
+		}
+		else
+		{
+			assert(false);
+#if 0
+			if (m_rigidBodyType != RigidBodyType::Kinematic)
+			{
+				m_rigidBody->setCollisionFlags(m_rigidBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+			}
+
+			glm::mat4 physics_world_transform;
+			{
+				glm::mat4 mmd_world_transform;
+
+				if (m_node != nullptr)
+				{
+					mmd_world_transform = m_node->GetGlobalTransform() * m_offsetMat;
+				}
+				else
+				{
+					mmd_world_transform = m_root->GetGlobalTransform() * m_offsetMat;
+				}
+
+				physics_world_transform = InvZ(mmd_world_transform);
+			}
+			static_cast<MMDMotionState *>(m_rigidBody->getMotionState())->setWorldTransform(physics_world_transform);
+
+			if (RigidBodyType::Kinematic != m_rigidBodyType)
+			{
+				m_rigidBody->setCollisionFlags(m_rigidBody->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
+			}
+
+			float brx_rotation[4];
+			float brx_translation[3];
+			{
+				glm::vec3 translate = glm::vec3(physics_world_transform[3]);
+				brx_translation[0] = translate.x;
+				brx_translation[1] = translate.y;
+				brx_translation[2] = translate.z;
+
+				glm::vec3 scale = glm::vec3(
+					glm::length(glm::vec3(physics_world_transform[0])),
+					glm::length(glm::vec3(physics_world_transform[1])),
+					glm::length(glm::vec3(physics_world_transform[2])));
+				assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+				glm::quat rotate = glm::quat_cast(glm::mat3(
+					glm::vec3(physics_world_transform[0]) / scale.x,
+					glm::vec3(physics_world_transform[1]) / scale.y,
+					glm::vec3(physics_world_transform[2]) / scale.z));
+				brx_rotation[0] = rotate.x;
+				brx_rotation[1] = rotate.y;
+				brx_rotation[2] = rotate.z;
+				brx_rotation[3] = rotate.w;
+			}
+
+			hk_physics_rigid_body_apply_key_frame(physics->m_hk_physics_context, physics->m_hk_physics_world, m_hk_physics_rigid_body, brx_rotation, brx_translation, time);
+
+			jph_physics_rigid_body_apply_key_frame(physics->m_jph_physics_context, physics->m_jph_physics_world, m_jph_physics_rigid_body, brx_rotation, brx_translation, time);
+#endif
 		}
 	}
 
-	void MMDRigidBody::Reset(MMDPhysics *physics)
+	void MMDRigidBody::ReflectGlobalTransform(const MMDPhysics &physics)
 	{
-		auto cache = physics->GetDynamicsWorld()->getPairCache();
-		if (cache != nullptr)
-		{
-			auto dispatcher = physics->GetDynamicsWorld()->getDispatcher();
-			cache->cleanProxyFromPairs(m_rigidBody->getBroadphaseHandle(), dispatcher);
-		}
-		m_rigidBody->setAngularVelocity(btVector3(0, 0, 0));
-		m_rigidBody->setLinearVelocity(btVector3(0, 0, 0));
-		m_rigidBody->clearForces();
-	}
+		// skeleton map: ragdoll to animation
 
-	void MMDRigidBody::ReflectGlobalTransform()
-	{
-		if (m_activeMotionState != nullptr)
+		if (nullptr != m_node)
 		{
-			m_activeMotionState->ReflectGlobalTransform();
-		}
-		if (m_kinematicMotionState != nullptr)
-		{
-			m_kinematicMotionState->ReflectGlobalTransform();
+			if (RigidBodyType::Dynamic == m_rigidBodyType)
+			{
+				glm::mat4 physics_world_transform;
+				{
+					float brx_rotation[4];
+					float brx_position[3];
+					// hk_physics_rigid_body_get_transform(physics.m_hk_physics_context, physics.m_hk_physics_world, m_hk_physics_rigid_body, brx_rotation, brx_position);
+					jph_physics_rigid_body_get_transform(physics.m_jph_physics_context, physics.m_jph_physics_world, m_jph_physics_rigid_body, brx_rotation, brx_position);
+
+					glm::mat4 rotMat = glm::mat4_cast(glm::quat(brx_rotation[3], brx_rotation[0], brx_rotation[1], brx_rotation[2]));
+
+					glm::mat4 translateMat = glm::translate(glm::mat4(1), glm::vec3(brx_position[0], brx_position[1], brx_position[2]));
+
+					physics_world_transform = translateMat * rotMat;
+
+#if 0
+					if (!glm::all(glm::epsilonEqual(physics_world_transform[0], physics_world_transform_2[0], 1E-1F))
+						|| !glm::all(glm::epsilonEqual(physics_world_transform[1], physics_world_transform_2[1], 1E-1F))
+						|| !glm::all(glm::epsilonEqual(physics_world_transform[2], physics_world_transform_2[2], 1E-1F))
+						|| !glm::all(glm::epsilonEqual(physics_world_transform[3], physics_world_transform_2[3], 1E-1F))
+						)
+					{
+						int huhu = 0;
+					}
+#endif
+				}
+
+				glm::mat4 mmd_world_transform = InvZ(physics_world_transform) * m_invOffsetMat;
+
+				m_node->SetGlobalTransform(mmd_world_transform);
+
+				m_node->UpdateChildTransform();
+			}
+			else if (RigidBodyType::Aligned == m_rigidBodyType)
+			{
+				glm::mat4 physics_world_transform;
+
+				{
+					float brx_rotation[4];
+					float brx_position[3];
+					// hk_physics_rigid_body_get_transform(physics.m_hk_physics_context, physics.m_hk_physics_world, m_hk_physics_rigid_body, brx_rotation, brx_position);
+					jph_physics_rigid_body_get_transform(physics.m_jph_physics_context, physics.m_jph_physics_world, m_jph_physics_rigid_body, brx_rotation, brx_position);
+
+					glm::mat4 rotMat = glm::mat4_cast(glm::quat(brx_rotation[3], brx_rotation[0], brx_rotation[1], brx_rotation[2]));
+
+					glm::mat4 translateMat = glm::translate(glm::mat4(1), glm::vec3(brx_position[0], brx_position[1], brx_position[2]));
+
+					physics_world_transform = translateMat * rotMat;
+				}
+
+				glm::mat4 mmd_world_transform = InvZ(physics_world_transform) * m_invOffsetMat;
+
+				glm::vec4 fixed_translation = m_node->GetGlobalTransform()[3];
+				mmd_world_transform[3] = fixed_translation;
+
+				m_node->SetGlobalTransform(mmd_world_transform);
+
+				m_node->UpdateChildTransform();
+			}
+			else
+			{
+				assert(RigidBodyType::Kinematic == m_rigidBodyType);
+			}
 		}
 	}
 
@@ -692,18 +550,10 @@ namespace saba
 		}
 	}
 
-	glm::mat4 MMDRigidBody::GetTransform()
-	{
-		btTransform transform = m_rigidBody->getCenterOfMassTransform();
-		alignas(16) glm::mat4 mat;
-		transform.getOpenGLMatrix(&mat[0][0]);
-		return InvZ(mat);
-	}
-
 	//*******************
 	// MMDJoint
 	//*******************
-	MMDJoint::MMDJoint()
+	MMDJoint::MMDJoint() : m_jph_physics_constraint(NULL)
 	{
 	}
 
@@ -713,172 +563,420 @@ namespace saba
 
 	bool MMDJoint::CreateJoint(const PMDJointExt &pmdJoint, MMDRigidBody *rigidBodyA, MMDRigidBody *rigidBodyB)
 	{
-		Destroy();
+		assert(false);
+		return false;
+	}
 
-		btMatrix3x3 rotMat;
-		rotMat.setEulerZYX(pmdJoint.m_jointRot.x, pmdJoint.m_jointRot.y, pmdJoint.m_jointRot.z);
+	bool MMDJoint::CreateJoint(const MMDPhysics &physics, const PMXJoint &pmxJoint, MMDRigidBody *rigidBodyA, MMDRigidBody *rigidBodyB)
+	{
+		assert(NULL == m_jph_physics_constraint);
 
-		btTransform transform;
-		transform.setIdentity();
-		transform.setOrigin(btVector3(
-			pmdJoint.m_jointPos.x,
-			pmdJoint.m_jointPos.y,
-			pmdJoint.m_jointPos.z));
-		transform.setBasis(rotMat);
+		float mmd_translation_limit_min_x = std::min(pmxJoint.m_translateLowerLimit.x, pmxJoint.m_translateUpperLimit.x);
+		float mmd_translation_limit_max_x = std::max(pmxJoint.m_translateLowerLimit.x, pmxJoint.m_translateUpperLimit.x);
+		float mmd_translation_limit_min_y = std::min(pmxJoint.m_translateLowerLimit.y, pmxJoint.m_translateUpperLimit.y);
+		float mmd_translation_limit_max_y = std::max(pmxJoint.m_translateLowerLimit.y, pmxJoint.m_translateUpperLimit.y);
+		float mmd_translation_limit_min_z = std::min(pmxJoint.m_translateLowerLimit.z, pmxJoint.m_translateUpperLimit.z);
+		float mmd_translation_limit_max_z = std::max(pmxJoint.m_translateLowerLimit.z, pmxJoint.m_translateUpperLimit.z);
 
-		btTransform invA = rigidBodyA->GetRigidBody()->getWorldTransform().inverse();
-		btTransform invB = rigidBodyB->GetRigidBody()->getWorldTransform().inverse();
-		invA = invA * transform;
-		invB = invB * transform;
+		float mmd_rotation_limit_min_x = std::min(pmxJoint.m_rotateLowerLimit.x, pmxJoint.m_rotateUpperLimit.x);
+		float mmd_rotation_limit_max_x = std::max(pmxJoint.m_rotateLowerLimit.x, pmxJoint.m_rotateUpperLimit.x);
+		float mmd_rotation_limit_min_y = std::min(pmxJoint.m_rotateLowerLimit.y, pmxJoint.m_rotateUpperLimit.y);
+		float mmd_rotation_limit_max_y = std::max(pmxJoint.m_rotateLowerLimit.y, pmxJoint.m_rotateUpperLimit.y);
+		float mmd_rotation_limit_min_z = std::min(pmxJoint.m_rotateLowerLimit.z, pmxJoint.m_rotateUpperLimit.z);
+		float mmd_rotation_limit_max_z = std::max(pmxJoint.m_rotateLowerLimit.z, pmxJoint.m_rotateUpperLimit.z);
 
-		auto constraint = std::make_unique<btGeneric6DofSpringConstraint>(
-			*rigidBodyA->GetRigidBody(),
-			*rigidBodyB->GetRigidBody(),
-			invA,
-			invB,
-			true);
-		constraint->setLinearLowerLimit(btVector3(
-			pmdJoint.m_constrainPos1.x,
-			pmdJoint.m_constrainPos1.y,
-			pmdJoint.m_constrainPos1.z));
-		constraint->setLinearUpperLimit(btVector3(
-			pmdJoint.m_constrainPos2.x,
-			pmdJoint.m_constrainPos2.y,
-			pmdJoint.m_constrainPos2.z));
-
-		constraint->setAngularLowerLimit(btVector3(
-			pmdJoint.m_constrainRot1.x,
-			pmdJoint.m_constrainRot1.y,
-			pmdJoint.m_constrainRot1.z));
-		constraint->setAngularUpperLimit(btVector3(
-			pmdJoint.m_constrainRot2.x,
-			pmdJoint.m_constrainRot2.y,
-			pmdJoint.m_constrainRot2.z));
-
-		if (pmdJoint.m_springPos.x != 0)
+		DirectX::XMFLOAT3 mmd_joint_local_origin;
 		{
-			constraint->enableSpring(0, true);
-			constraint->setStiffness(0, pmdJoint.m_springPos.x);
-		}
-		if (pmdJoint.m_springPos.y != 0)
-		{
-			constraint->enableSpring(1, true);
-			constraint->setStiffness(1, pmdJoint.m_springPos.y);
-		}
-		if (pmdJoint.m_springPos.z != 0)
-		{
-			constraint->enableSpring(2, true);
-			constraint->setStiffness(2, -pmdJoint.m_springPos.z);
-		}
-		if (pmdJoint.m_springRot.x != 0)
-		{
-			constraint->enableSpring(3, true);
-			constraint->setStiffness(3, pmdJoint.m_springRot.x);
-		}
-		if (pmdJoint.m_springRot.y != 0)
-		{
-			constraint->enableSpring(4, true);
-			constraint->setStiffness(4, pmdJoint.m_springRot.y);
-		}
-		if (pmdJoint.m_springRot.z != 0)
-		{
-			constraint->enableSpring(5, true);
-			constraint->setStiffness(5, pmdJoint.m_springRot.z);
+			mmd_joint_local_origin.x = pmxJoint.m_translate.x;
+			mmd_joint_local_origin.y = pmxJoint.m_translate.y;
+			mmd_joint_local_origin.z = pmxJoint.m_translate.z;
 		}
 
-		m_constraint = std::move(constraint);
+		DirectX::XMFLOAT3 mmd_joint_local_axis_x;
+		DirectX::XMFLOAT3 mmd_joint_local_axis_y;
+		DirectX::XMFLOAT3 mmd_joint_local_axis_z;
+		{
+			// YXZ
+			// [FnRigidBody.new_joint_object](https://github.com/MMD-Blender/blender_mmd_tools/blob/main/mmd_tools/core/rigid_body.py#L202)
+			glm::mat4 ry = glm::rotate(glm::mat4(1), pmxJoint.m_rotate.y, glm::vec3(0, 1, 0));
+			glm::mat4 rx = glm::rotate(glm::mat4(1), pmxJoint.m_rotate.x, glm::vec3(1, 0, 0));
+			glm::mat4 rz = glm::rotate(glm::mat4(1), pmxJoint.m_rotate.z, glm::vec3(0, 0, 1));
+			glm::mat4 rotMat = ry * rx * rz;
+
+			glm::vec3 _mmd_joint_local_axis_x = glm::vec3(rotMat * glm::vec4(1.0, 0.0, 0.0, 0.0));
+			glm::vec3 _mmd_joint_local_axis_y = glm::vec3(rotMat * glm::vec4(0.0, 1.0, 0.0, 0.0));
+			glm::vec3 _mmd_joint_local_axis_z = glm::vec3(rotMat * glm::vec4(0.0, 0.0, 1.0, 0.0));
+
+			mmd_joint_local_axis_x = DirectX::XMFLOAT3(_mmd_joint_local_axis_x.x, _mmd_joint_local_axis_x.y, _mmd_joint_local_axis_x.z);
+			mmd_joint_local_axis_y = DirectX::XMFLOAT3(_mmd_joint_local_axis_y.x, _mmd_joint_local_axis_y.y, _mmd_joint_local_axis_y.z);
+			mmd_joint_local_axis_z = DirectX::XMFLOAT3(_mmd_joint_local_axis_z.x, _mmd_joint_local_axis_z.y, _mmd_joint_local_axis_z.z);
+		}
+
+		DirectX::XMFLOAT4 rigid_body_b_rotation;
+		DirectX::XMFLOAT3 rigid_body_b_translation;
+		jph_physics_rigid_body_get_transform(physics.m_jph_physics_context, physics.m_jph_physics_world, rigidBodyB->m_jph_physics_rigid_body, &rigid_body_b_rotation.x, &rigid_body_b_translation.x);
+
+		// NOTE: when the simulate step is too large (e.g., the debug version), the constaints may not work correctly
+
+		BRX_PHYSICS_CONSTRAINT_TYPE brx_constraint_type;
+		DirectX::XMFLOAT3 brx_pivot;
+		DirectX::XMFLOAT3 brx_twist_axis;
+		DirectX::XMFLOAT3 brx_plane_axis;
+		DirectX::XMFLOAT3 brx_normal_axis;
+		float brx_twist_limit[2];
+		float brx_plane_limit[2];
+		float brx_normal_limit[2];
+		{
+			brx_pivot = mmd_joint_local_origin;
+
+			constexpr float const INTERNAL_EPSILON = 1E-6F;
+			constexpr float const INTERNAL_PI = DirectX::XM_PI;
+			constexpr float const INTERNAL_NEAR_PI_DIV_2 = DirectX::XM_PIDIV2 - INTERNAL_EPSILON;
+
+			float mmd_translation_limit_abs_x = std::max(std::abs(mmd_translation_limit_min_x), std::abs(mmd_translation_limit_max_x));
+			float mmd_translation_limit_abs_y = std::max(std::abs(mmd_translation_limit_min_y), std::abs(mmd_translation_limit_max_y));
+			float mmd_translation_limit_abs_z = std::max(std::abs(mmd_translation_limit_min_z), std::abs(mmd_translation_limit_max_z));
+
+			float mmd_rotation_limit_abs_x = std::max(std::abs(mmd_rotation_limit_min_x), std::abs(mmd_rotation_limit_max_x));
+			float mmd_rotation_limit_abs_y = std::max(std::abs(mmd_rotation_limit_min_y), std::abs(mmd_rotation_limit_max_y));
+			float mmd_rotation_limit_abs_z = std::max(std::abs(mmd_rotation_limit_min_z), std::abs(mmd_rotation_limit_max_z));
+
+			if (mmd_rotation_limit_abs_x <= INTERNAL_EPSILON && mmd_rotation_limit_abs_y <= INTERNAL_EPSILON && mmd_rotation_limit_abs_z <= INTERNAL_EPSILON && mmd_translation_limit_abs_x <= INTERNAL_EPSILON && mmd_translation_limit_abs_y <= INTERNAL_EPSILON && mmd_translation_limit_abs_z <= INTERNAL_EPSILON)
+			{
+				brx_constraint_type = BRX_PHYSICS_CONSTRAINT_FIXED;
+
+				brx_twist_axis = mmd_joint_local_axis_x;
+
+				brx_plane_axis = mmd_joint_local_axis_y;
+
+				brx_normal_axis = mmd_joint_local_axis_z;
+
+				brx_twist_limit[0] = 0.0F;
+				brx_twist_limit[1] = 0.0F;
+
+				brx_plane_limit[0] = 0.0F;
+				brx_plane_limit[1] = 0.0F;
+
+				brx_normal_limit[0] = 0.0F;
+				brx_normal_limit[1] = 0.0F;
+			}
+			else if (mmd_rotation_limit_abs_x <= INTERNAL_EPSILON && mmd_rotation_limit_abs_y <= INTERNAL_EPSILON && mmd_rotation_limit_abs_z <= INTERNAL_EPSILON && mmd_translation_limit_abs_x <= INTERNAL_EPSILON && mmd_translation_limit_abs_y <= INTERNAL_EPSILON)
+			{
+				brx_constraint_type = BRX_PHYSICS_CONSTRAINT_PRISMATIC;
+
+				brx_twist_axis = mmd_joint_local_axis_x;
+
+				brx_plane_axis = mmd_joint_local_axis_y;
+
+				brx_normal_axis = mmd_joint_local_axis_z;
+
+				brx_twist_limit[0] = 0.0F;
+				brx_twist_limit[1] = 0.0F;
+
+				brx_plane_limit[0] = 0.0F;
+				brx_plane_limit[1] = 0.0F;
+
+				brx_normal_limit[0] = mmd_translation_limit_min_z;
+				brx_normal_limit[1] = mmd_translation_limit_max_z;
+			}
+			else if (mmd_rotation_limit_abs_x <= INTERNAL_EPSILON && mmd_rotation_limit_abs_y <= INTERNAL_EPSILON && mmd_rotation_limit_abs_z <= INTERNAL_EPSILON && mmd_translation_limit_abs_y <= INTERNAL_EPSILON && mmd_translation_limit_abs_z <= INTERNAL_EPSILON)
+			{
+				brx_constraint_type = BRX_PHYSICS_CONSTRAINT_PRISMATIC;
+
+				brx_twist_axis = mmd_joint_local_axis_y;
+
+				brx_plane_axis = mmd_joint_local_axis_z;
+
+				brx_normal_axis = mmd_joint_local_axis_x;
+
+				brx_twist_limit[0] = 0.0F;
+				brx_twist_limit[1] = 0.0F;
+
+				brx_plane_limit[0] = 0.0F;
+				brx_plane_limit[1] = 0.0F;
+
+				brx_normal_limit[0] = mmd_translation_limit_min_x;
+				brx_normal_limit[1] = mmd_translation_limit_max_x;
+			}
+			else if (mmd_rotation_limit_abs_x <= INTERNAL_EPSILON && mmd_rotation_limit_abs_y <= INTERNAL_EPSILON && mmd_rotation_limit_abs_z <= INTERNAL_EPSILON && mmd_translation_limit_abs_z <= INTERNAL_EPSILON && mmd_translation_limit_abs_x <= INTERNAL_EPSILON)
+			{
+				brx_constraint_type = BRX_PHYSICS_CONSTRAINT_PRISMATIC;
+
+				brx_twist_axis = mmd_joint_local_axis_z;
+
+				brx_plane_axis = mmd_joint_local_axis_x;
+
+				brx_normal_axis = mmd_joint_local_axis_y;
+
+				brx_twist_limit[0] = 0.0F;
+				brx_twist_limit[1] = 0.0F;
+
+				brx_plane_limit[0] = 0.0F;
+				brx_plane_limit[1] = 0.0F;
+
+				brx_normal_limit[0] = mmd_translation_limit_min_y;
+				brx_normal_limit[1] = mmd_translation_limit_max_y;
+			}
+			else
+			{
+				// convert from translation to rotation
+				if (mmd_translation_limit_abs_x >= INTERNAL_EPSILON || mmd_translation_limit_abs_y >= INTERNAL_EPSILON || mmd_translation_limit_abs_z >= INTERNAL_EPSILON)
+				{
+					assert((mmd_rotation_limit_abs_x >= INTERNAL_EPSILON || mmd_rotation_limit_abs_y >= INTERNAL_EPSILON || mmd_rotation_limit_abs_z >= INTERNAL_EPSILON) || (mmd_translation_limit_abs_x >= INTERNAL_EPSILON && mmd_translation_limit_abs_y >= INTERNAL_EPSILON && mmd_translation_limit_abs_z >= INTERNAL_EPSILON));
+
+					float rigid_body_b_body_space_translation_length = DirectX::XMVectorGetX(DirectX::XMVector3Length(DirectX::XMVectorSubtract(DirectX::XMLoadFloat3(&rigid_body_b_translation), DirectX::XMLoadFloat3(&mmd_joint_local_origin))));
+
+					if (std::abs(mmd_rotation_limit_abs_x - mmd_rotation_limit_abs_y) <= INTERNAL_EPSILON && std::abs(mmd_rotation_limit_abs_y - mmd_rotation_limit_abs_z) <= INTERNAL_EPSILON && std::abs(mmd_rotation_limit_abs_z - mmd_rotation_limit_abs_x) <= INTERNAL_EPSILON)
+					{
+						if (mmd_translation_limit_abs_x <= mmd_translation_limit_abs_y && mmd_translation_limit_abs_x <= mmd_translation_limit_abs_z)
+						{
+							mmd_rotation_limit_min_y = std::min(mmd_rotation_limit_min_y, internal_asin(mmd_translation_limit_min_z, rigid_body_b_body_space_translation_length));
+							mmd_rotation_limit_min_z = std::min(mmd_rotation_limit_min_z, internal_asin(mmd_translation_limit_min_y, rigid_body_b_body_space_translation_length));
+
+							mmd_rotation_limit_max_y = std::max(mmd_rotation_limit_max_y, internal_asin(mmd_translation_limit_max_z, rigid_body_b_body_space_translation_length));
+							mmd_rotation_limit_max_z = std::max(mmd_rotation_limit_max_z, internal_asin(mmd_translation_limit_max_y, rigid_body_b_body_space_translation_length));
+						}
+						else if (mmd_translation_limit_abs_y <= mmd_translation_limit_abs_z && mmd_translation_limit_abs_y <= mmd_translation_limit_abs_x)
+						{
+							mmd_rotation_limit_min_x = std::min(mmd_rotation_limit_min_x, internal_asin(mmd_translation_limit_min_z, rigid_body_b_body_space_translation_length));
+							mmd_rotation_limit_min_z = std::min(mmd_rotation_limit_min_z, internal_asin(mmd_translation_limit_min_x, rigid_body_b_body_space_translation_length));
+
+							mmd_rotation_limit_max_x = std::max(mmd_rotation_limit_max_x, internal_asin(mmd_translation_limit_max_z, rigid_body_b_body_space_translation_length));
+							mmd_rotation_limit_max_z = std::max(mmd_rotation_limit_max_z, internal_asin(mmd_translation_limit_max_x, rigid_body_b_body_space_translation_length));
+						}
+						else
+						{
+							assert(mmd_translation_limit_abs_z <= mmd_translation_limit_abs_x && mmd_translation_limit_abs_z <= mmd_translation_limit_abs_y);
+
+							mmd_rotation_limit_min_x = std::min(mmd_rotation_limit_min_x, internal_asin(mmd_translation_limit_min_y, rigid_body_b_body_space_translation_length));
+							mmd_rotation_limit_min_y = std::min(mmd_rotation_limit_min_y, internal_asin(mmd_translation_limit_min_x, rigid_body_b_body_space_translation_length));
+
+							mmd_rotation_limit_max_x = std::max(mmd_rotation_limit_max_x, internal_asin(mmd_translation_limit_max_y, rigid_body_b_body_space_translation_length));
+							mmd_rotation_limit_max_y = std::max(mmd_rotation_limit_max_y, internal_asin(mmd_translation_limit_max_x, rigid_body_b_body_space_translation_length));
+						}
+					}
+					else if (mmd_rotation_limit_abs_x <= mmd_rotation_limit_abs_y && mmd_rotation_limit_abs_x <= mmd_rotation_limit_abs_z)
+					{
+						mmd_rotation_limit_min_y = std::min(mmd_rotation_limit_min_y, internal_asin(mmd_translation_limit_min_z, rigid_body_b_body_space_translation_length));
+						mmd_rotation_limit_min_z = std::min(mmd_rotation_limit_min_z, internal_asin(mmd_translation_limit_min_y, rigid_body_b_body_space_translation_length));
+
+						mmd_rotation_limit_max_y = std::max(mmd_rotation_limit_max_y, internal_asin(mmd_translation_limit_max_z, rigid_body_b_body_space_translation_length));
+						mmd_rotation_limit_max_z = std::max(mmd_rotation_limit_max_z, internal_asin(mmd_translation_limit_max_y, rigid_body_b_body_space_translation_length));
+					}
+					else if (mmd_rotation_limit_abs_y <= mmd_rotation_limit_abs_z && mmd_rotation_limit_abs_y <= mmd_rotation_limit_abs_x)
+					{
+						mmd_rotation_limit_min_x = std::min(mmd_rotation_limit_min_x, internal_asin(mmd_translation_limit_min_z, rigid_body_b_body_space_translation_length));
+						mmd_rotation_limit_min_z = std::min(mmd_rotation_limit_min_z, internal_asin(mmd_translation_limit_min_x, rigid_body_b_body_space_translation_length));
+
+						mmd_rotation_limit_max_x = std::max(mmd_rotation_limit_max_x, internal_asin(mmd_translation_limit_max_z, rigid_body_b_body_space_translation_length));
+						mmd_rotation_limit_max_z = std::max(mmd_rotation_limit_max_z, internal_asin(mmd_translation_limit_max_x, rigid_body_b_body_space_translation_length));
+					}
+					else
+					{
+						assert(mmd_rotation_limit_abs_z <= mmd_rotation_limit_abs_x && mmd_rotation_limit_abs_z <= mmd_rotation_limit_abs_y);
+
+						mmd_rotation_limit_min_x = std::min(mmd_rotation_limit_min_x, internal_asin(mmd_translation_limit_min_y, rigid_body_b_body_space_translation_length));
+						mmd_rotation_limit_min_y = std::min(mmd_rotation_limit_min_y, internal_asin(mmd_translation_limit_min_x, rigid_body_b_body_space_translation_length));
+
+						mmd_rotation_limit_max_x = std::max(mmd_rotation_limit_max_x, internal_asin(mmd_translation_limit_max_y, rigid_body_b_body_space_translation_length));
+						mmd_rotation_limit_max_y = std::max(mmd_rotation_limit_max_y, internal_asin(mmd_translation_limit_max_x, rigid_body_b_body_space_translation_length));
+					}
+
+					mmd_rotation_limit_abs_x = std::max(std::abs(mmd_rotation_limit_min_x), std::abs(mmd_rotation_limit_max_x));
+					mmd_rotation_limit_abs_y = std::max(std::abs(mmd_rotation_limit_min_y), std::abs(mmd_rotation_limit_max_y));
+					mmd_rotation_limit_abs_z = std::max(std::abs(mmd_rotation_limit_min_z), std::abs(mmd_rotation_limit_max_z));
+
+					mmd_translation_limit_min_x = 0.0F;
+					mmd_translation_limit_max_x = 0.0F;
+					mmd_translation_limit_min_y = 0.0F;
+					mmd_translation_limit_max_y = 0.0F;
+					mmd_translation_limit_min_z = 0.0F;
+					mmd_translation_limit_max_z = 0.0F;
+
+					mmd_translation_limit_abs_x = std::max(std::abs(mmd_translation_limit_min_x), std::abs(mmd_translation_limit_max_x));
+					mmd_translation_limit_abs_y = std::max(std::abs(mmd_translation_limit_min_y), std::abs(mmd_translation_limit_max_y));
+					mmd_translation_limit_abs_z = std::max(std::abs(mmd_translation_limit_min_z), std::abs(mmd_translation_limit_max_z));
+				}
+
+				assert(mmd_rotation_limit_abs_x >= INTERNAL_EPSILON || mmd_rotation_limit_abs_y >= INTERNAL_EPSILON || mmd_rotation_limit_abs_z >= INTERNAL_EPSILON);
+
+				if (mmd_rotation_limit_abs_x <= INTERNAL_EPSILON && mmd_rotation_limit_abs_y <= INTERNAL_EPSILON)
+				{
+					brx_constraint_type = BRX_PHYSICS_CONSTRAINT_HINGE;
+
+					brx_twist_axis = mmd_joint_local_axis_x;
+
+					brx_plane_axis = mmd_joint_local_axis_y;
+
+					brx_normal_axis = mmd_joint_local_axis_z;
+
+					brx_twist_limit[0] = 0.0F;
+					brx_twist_limit[1] = 0.0F;
+
+					brx_plane_limit[0] = 0.0F;
+					brx_plane_limit[1] = 0.0F;
+
+					brx_normal_limit[0] = mmd_rotation_limit_min_z;
+					brx_normal_limit[1] = mmd_rotation_limit_max_z;
+				}
+				else if (mmd_rotation_limit_abs_y <= INTERNAL_EPSILON && mmd_rotation_limit_abs_z <= INTERNAL_EPSILON)
+				{
+					brx_constraint_type = BRX_PHYSICS_CONSTRAINT_HINGE;
+
+					brx_twist_axis = mmd_joint_local_axis_y;
+
+					brx_plane_axis = mmd_joint_local_axis_z;
+
+					brx_normal_axis = mmd_joint_local_axis_x;
+
+					brx_twist_limit[0] = 0.0F;
+					brx_twist_limit[1] = 0.0F;
+
+					brx_plane_limit[0] = 0.0F;
+					brx_plane_limit[1] = 0.0F;
+
+					brx_normal_limit[0] = mmd_rotation_limit_min_x;
+					brx_normal_limit[1] = mmd_rotation_limit_max_x;
+				}
+				else if (mmd_rotation_limit_abs_z <= INTERNAL_EPSILON && mmd_rotation_limit_abs_x <= INTERNAL_EPSILON)
+				{
+					brx_constraint_type = BRX_PHYSICS_CONSTRAINT_HINGE;
+
+					brx_twist_axis = mmd_joint_local_axis_z;
+
+					brx_plane_axis = mmd_joint_local_axis_x;
+
+					brx_normal_axis = mmd_joint_local_axis_y;
+
+					brx_twist_limit[0] = 0.0F;
+					brx_twist_limit[1] = 0.0F;
+
+					brx_plane_limit[0] = 0.0F;
+					brx_plane_limit[1] = 0.0F;
+
+					brx_normal_limit[0] = mmd_rotation_limit_min_y;
+					brx_normal_limit[1] = mmd_rotation_limit_max_y;
+				}
+				else if ((std::abs(mmd_rotation_limit_abs_x) >= INTERNAL_NEAR_PI_DIV_2 && std::abs(mmd_rotation_limit_abs_y) >= INTERNAL_NEAR_PI_DIV_2) || (std::abs(mmd_rotation_limit_abs_y) >= INTERNAL_NEAR_PI_DIV_2 && std::abs(mmd_rotation_limit_abs_z) >= INTERNAL_NEAR_PI_DIV_2) || (std::abs(mmd_rotation_limit_abs_z) >= INTERNAL_NEAR_PI_DIV_2 && std::abs(mmd_rotation_limit_abs_x) >= INTERNAL_NEAR_PI_DIV_2))
+				{
+					brx_constraint_type = BRX_PHYSICS_CONSTRAINT_BALL_AND_SOCKET;
+
+					brx_twist_axis = mmd_joint_local_axis_x;
+
+					brx_plane_axis = mmd_joint_local_axis_y;
+
+					brx_normal_axis = mmd_joint_local_axis_z;
+
+					brx_twist_limit[0] = 0.0F;
+					brx_twist_limit[1] = 0.0F;
+
+					brx_plane_limit[0] = 0.0F;
+					brx_plane_limit[1] = 0.0F;
+
+					brx_normal_limit[0] = 0.0F;
+					brx_normal_limit[1] = 0.0F;
+				}
+				else
+				{
+					brx_constraint_type = BRX_PHYSICS_CONSTRAINT_RAGDOLL;
+
+					if (mmd_rotation_limit_abs_x <= mmd_rotation_limit_abs_y && mmd_rotation_limit_abs_x <= mmd_rotation_limit_abs_z)
+					{
+						brx_twist_axis = mmd_joint_local_axis_x;
+
+						brx_plane_axis = mmd_joint_local_axis_y;
+
+						brx_normal_axis = mmd_joint_local_axis_z;
+
+						brx_twist_limit[0] = mmd_rotation_limit_min_x;
+						brx_twist_limit[1] = mmd_rotation_limit_max_x;
+
+						brx_plane_limit[0] = mmd_rotation_limit_min_y;
+						brx_plane_limit[1] = mmd_rotation_limit_max_y;
+
+						brx_normal_limit[0] = mmd_rotation_limit_min_z;
+						brx_normal_limit[1] = mmd_rotation_limit_max_z;
+					}
+					else if (mmd_rotation_limit_abs_y <= mmd_rotation_limit_abs_z && mmd_rotation_limit_abs_y <= mmd_rotation_limit_abs_x)
+					{
+
+						brx_twist_axis = mmd_joint_local_axis_y;
+
+						brx_plane_axis = mmd_joint_local_axis_z;
+
+						brx_normal_axis = mmd_joint_local_axis_x;
+
+						brx_twist_limit[0] = mmd_rotation_limit_min_y;
+						brx_twist_limit[1] = mmd_rotation_limit_max_y;
+
+						brx_plane_limit[0] = mmd_rotation_limit_min_z;
+						brx_plane_limit[1] = mmd_rotation_limit_max_z;
+
+						brx_normal_limit[0] = mmd_rotation_limit_min_x;
+						brx_normal_limit[1] = mmd_rotation_limit_max_x;
+					}
+					else
+					{
+						assert(mmd_rotation_limit_abs_z <= mmd_rotation_limit_abs_x && mmd_rotation_limit_abs_z <= mmd_rotation_limit_abs_y);
+
+						brx_twist_axis = mmd_joint_local_axis_z;
+
+						brx_plane_axis = mmd_joint_local_axis_x;
+
+						brx_normal_axis = mmd_joint_local_axis_y;
+
+						brx_twist_limit[0] = mmd_rotation_limit_min_z;
+						brx_twist_limit[1] = mmd_rotation_limit_max_z;
+
+						brx_plane_limit[0] = mmd_rotation_limit_min_x;
+						brx_plane_limit[1] = mmd_rotation_limit_max_x;
+
+						brx_normal_limit[0] = mmd_rotation_limit_min_y;
+						brx_normal_limit[1] = mmd_rotation_limit_max_y;
+					}
+				}
+			}
+		}
+
+		m_jph_physics_constraint = jph_physics_create_constraint(physics.m_jph_physics_context, physics.m_jph_physics_world, rigidBodyA->m_jph_physics_rigid_body, rigidBodyB->m_jph_physics_rigid_body, brx_constraint_type, &brx_pivot.x, &brx_twist_axis.x, &brx_plane_axis.x, &brx_normal_axis.x, brx_twist_limit, brx_plane_limit, brx_normal_limit);
 
 		return true;
 	}
 
-	bool MMDJoint::CreateJoint(const PMXJoint &pmxJoint, MMDRigidBody *rigidBodyA, MMDRigidBody *rigidBodyB)
+	void MMDJoint::Destroy(const MMDPhysics &physics)
 	{
-		Destroy();
-
-		btMatrix3x3 rotMat;
-		rotMat.setEulerZYX(pmxJoint.m_rotate.x, pmxJoint.m_rotate.y, pmxJoint.m_rotate.z);
-
-		btTransform transform;
-		transform.setIdentity();
-		transform.setOrigin(btVector3(
-			pmxJoint.m_translate.x,
-			pmxJoint.m_translate.y,
-			pmxJoint.m_translate.z));
-		transform.setBasis(rotMat);
-
-		btTransform invA = rigidBodyA->GetRigidBody()->getWorldTransform().inverse();
-		btTransform invB = rigidBodyB->GetRigidBody()->getWorldTransform().inverse();
-		invA = invA * transform;
-		invB = invB * transform;
-
-		auto constraint = std::make_unique<btGeneric6DofSpringConstraint>(
-			*rigidBodyA->GetRigidBody(),
-			*rigidBodyB->GetRigidBody(),
-			invA,
-			invB,
-			true);
-		constraint->setLinearLowerLimit(btVector3(
-			pmxJoint.m_translateLowerLimit.x,
-			pmxJoint.m_translateLowerLimit.y,
-			pmxJoint.m_translateLowerLimit.z));
-		constraint->setLinearUpperLimit(btVector3(
-			pmxJoint.m_translateUpperLimit.x,
-			pmxJoint.m_translateUpperLimit.y,
-			pmxJoint.m_translateUpperLimit.z));
-
-		constraint->setAngularLowerLimit(btVector3(
-			pmxJoint.m_rotateLowerLimit.x,
-			pmxJoint.m_rotateLowerLimit.y,
-			pmxJoint.m_rotateLowerLimit.z));
-		constraint->setAngularUpperLimit(btVector3(
-			pmxJoint.m_rotateUpperLimit.x,
-			pmxJoint.m_rotateUpperLimit.y,
-			pmxJoint.m_rotateUpperLimit.z));
-
-		if (pmxJoint.m_springTranslateFactor.x != 0)
+		if (NULL != m_jph_physics_constraint)
 		{
-			constraint->enableSpring(0, true);
-			constraint->setStiffness(0, pmxJoint.m_springTranslateFactor.x);
-		}
-		if (pmxJoint.m_springTranslateFactor.y != 0)
-		{
-			constraint->enableSpring(1, true);
-			constraint->setStiffness(1, pmxJoint.m_springTranslateFactor.y);
-		}
-		if (pmxJoint.m_springTranslateFactor.z != 0)
-		{
-			constraint->enableSpring(2, true);
-			constraint->setStiffness(2, pmxJoint.m_springTranslateFactor.z);
-		}
-		if (pmxJoint.m_springRotateFactor.x != 0)
-		{
-			constraint->enableSpring(3, true);
-			constraint->setStiffness(3, pmxJoint.m_springRotateFactor.x);
-		}
-		if (pmxJoint.m_springRotateFactor.y != 0)
-		{
-			constraint->enableSpring(4, true);
-			constraint->setStiffness(4, pmxJoint.m_springRotateFactor.y);
-		}
-		if (pmxJoint.m_springRotateFactor.z != 0)
-		{
-			constraint->enableSpring(5, true);
-			constraint->setStiffness(5, pmxJoint.m_springRotateFactor.z);
-		}
+			jph_physics_destory_constraint(physics.m_jph_physics_context, physics.m_jph_physics_world, m_jph_physics_constraint);
 
-		m_constraint = std::move(constraint);
-
-		return true;
+			m_jph_physics_constraint = NULL;
+		}
 	}
-
-	void MMDJoint::Destroy()
-	{
-		m_constraint = nullptr;
-	}
-
-	btTypedConstraint *MMDJoint::GetConstraint() const
-	{
-		return m_constraint.get();
-	}
-
 }
+
+#if defined(__GNUC__)
+#error 1
+#elif defined(_MSC_VER)
+static inline void *_internal_dynamic_link_open(wchar_t const *filename)
+{
+	HMODULE dynamic_link_handle = GetModuleHandleW(filename);
+	if (NULL == dynamic_link_handle)
+	{
+		assert(ERROR_MOD_NOT_FOUND == GetLastError());
+
+		dynamic_link_handle = LoadLibraryW(filename);
+		if (NULL == dynamic_link_handle)
+		{
+			assert(ERROR_MOD_NOT_FOUND == GetLastError());
+			assert(false);
+		}
+	}
+
+	return dynamic_link_handle;
+}
+
+static inline void *_internal_dynamic_link_symbol(void *handle, char const *symbol)
+{
+	return reinterpret_cast<void *>(GetProcAddress(static_cast<HINSTANCE>(handle), symbol));
+}
+#endif

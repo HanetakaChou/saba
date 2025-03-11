@@ -23,12 +23,14 @@ namespace saba
 		for (auto &joint : m_joints)
 		{
 			m_mmdPhysics->RemoveJoint(joint.get());
+			joint->Destroy(*m_mmdPhysics);
 		}
 		m_joints.clear();
 
 		for (auto &rb : m_rigidBodys)
 		{
 			m_mmdPhysics->RemoveRigidBody(rb.get());
+			rb->Destroy(*m_mmdPhysics);
 		}
 		m_rigidBodys.clear();
 
@@ -185,11 +187,12 @@ namespace saba
 			auto nodeIdx = GetNodeManager()->FindNodeIndex(bone.m_boneName);
 			if (MMDNodeManager::NPos != nodeIdx)
 			{
+				assert(false);
 				Pose pose;
 				pose.m_node = GetNodeManager()->GetMMDNode(bone.m_boneName);
-				pose.m_beginTranslate = pose.m_node->GetAnimationTranslate();
+				// pose.m_beginTranslate = pose.m_node->GetAnimationTranslate();
 				pose.m_endTranslate = bone.m_translate * glm::vec3(1, 1, -1);
-				pose.m_beginRotate = pose.m_node->GetAnimationRotate();
+				// pose.m_beginRotate = pose.m_node->GetAnimationRotate();
 				pose.m_endRotate = InvZ(bone.m_quaternion);
 				poses.emplace_back(std::move(pose));
 			}

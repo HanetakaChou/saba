@@ -12,7 +12,7 @@
 namespace saba
 {
 	MMDNode::MMDNode()
-		: m_index(0), m_enableIK(false), m_parent(nullptr), m_child(nullptr), m_next(nullptr), m_prev(nullptr), m_translate(0), m_rotate(1, 0, 0, 0), m_scale(1), m_animTranslate(0), m_animRotate(1, 0, 0, 0), m_baseAnimTranslate(0), m_baseAnimRotate(1, 0, 0, 0), m_ikRotate(1, 0, 0, 0), m_local(1), m_global(1), m_inverseInit(1), m_initTranslate(0), m_initRotate(1, 0, 0, 0), m_initScale(1)
+		: m_index(0), m_enableIK(false), m_parent(nullptr), m_child(nullptr), m_next(nullptr), m_prev(nullptr), m_translate(0), m_rotate(1, 0, 0, 0), m_scale(1), m_global(1), m_inverseInit(1), m_initTranslate(0), m_initRotate(1, 0, 0, 0), m_initScale(1)
 	{
 	}
 
@@ -47,7 +47,6 @@ namespace saba
 	void MMDNode::BeginUpdateTransform()
 	{
 		LoadInitialTRS();
-		SetIKRotate(glm::quat(1, 0, 0, 0));
 		OnBeginUpdateTransform();
 	}
 
@@ -56,20 +55,39 @@ namespace saba
 		OnEndUpdateTransfrom();
 	}
 
-	void MMDNode::UpdateLocalTransform()
+	glm::mat4 MMDNode::SyncLocalTransformToGlobal()
 	{
-		OnUpdateLocalTransform();
+		std::vector<MMDNode *> ancestors;
+		MMDNode *current = this;
+		while (current != nullptr)
+		{
+			ancestors.push_back(current);
+			current = current->m_parent;
+		}
+
+		assert(!ancestors.empty());
+
+		glm::mat4 global = ancestors.back()->GetLocalTransform();
+		ancestors.pop_back();
+
+		while (!ancestors.empty())
+		{
+			global = global * ancestors.back()->GetLocalTransform();
+			ancestors.pop_back();
+		}
+
+		return global;
 	}
 
 	void MMDNode::UpdateGlobalTransform()
 	{
 		if (m_parent == nullptr)
 		{
-			m_global = m_local;
+			m_global = GetLocalTransform();
 		}
 		else
 		{
-			m_global = m_parent->m_global * m_local;
+			m_global = m_parent->m_global * GetLocalTransform();
 		}
 		MMDNode *child = m_child;
 		while (child != nullptr)
@@ -101,17 +119,4 @@ namespace saba
 	void MMDNode::OnEndUpdateTransfrom()
 	{
 	}
-
-	void MMDNode::OnUpdateLocalTransform()
-	{
-		auto s = glm::scale(glm::mat4(1), GetScale());
-		auto r = glm::mat4_cast(AnimateRotate());
-		auto t = glm::translate(glm::mat4(1), AnimateTranslate());
-		if (m_enableIK)
-		{
-			r = glm::mat4_cast(m_ikRotate) * r;
-		}
-		m_local = t * r * s;
-	}
-
 }
