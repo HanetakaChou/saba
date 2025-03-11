@@ -55,11 +55,6 @@ namespace saba
 			node->SetAnimationRotate(glm::quat(1, 0, 0, 0));
 		}
 
-		for (auto &node : (*m_nodeMan.GetNodes()))
-		{
-			node->UpdateLocalTransform();
-		}
-
 		for (auto &morph : (*m_morphMan.GetMorphs()))
 		{
 			morph->SetWeight(0);
@@ -111,11 +106,6 @@ namespace saba
 
 		for (auto &node : (*m_nodeMan.GetNodes()))
 		{
-			node->UpdateLocalTransform();
-		}
-
-		for (auto &node : (*m_nodeMan.GetNodes()))
-		{
 			if (node->GetParent() == nullptr)
 			{
 				node->UpdateGlobalTransform();
@@ -142,7 +132,7 @@ namespace saba
 		auto joints = physicsMan->GetJoints();
 		for (auto &rb : (*rigidbodys))
 		{
-			rb->SetActivation(false);
+			rb->SetActivation(false, physics, 1.0F);
 			rb->ResetTransform();
 		}
 
@@ -182,10 +172,9 @@ namespace saba
 		}
 
 		auto rigidbodys = physicsMan->GetRigidBodys();
-		auto joints = physicsMan->GetJoints();
 		for (auto &rb : (*rigidbodys))
 		{
-			rb->SetActivation(true);
+			rb->SetActivation(true, physics, elapsed);
 		}
 
 		physics->Update(elapsed);
