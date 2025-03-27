@@ -20,18 +20,6 @@ namespace saba
 
 	MMDPhysicsManager::~MMDPhysicsManager()
 	{
-		for (auto &joint : m_joints)
-		{
-			m_mmdPhysics->RemoveJoint(joint.get());
-		}
-		m_joints.clear();
-
-		for (auto &rb : m_rigidBodys)
-		{
-			m_mmdPhysics->RemoveRigidBody(rb.get());
-		}
-		m_rigidBodys.clear();
-
 		m_mmdPhysics.reset();
 	}
 
@@ -44,26 +32,6 @@ namespace saba
 	MMDPhysics *MMDPhysicsManager::GetMMDPhysics()
 	{
 		return m_mmdPhysics.get();
-	}
-
-	MMDRigidBody *MMDPhysicsManager::AddRigidBody()
-	{
-		SABA_ASSERT(m_mmdPhysics != nullptr);
-		auto rigidBody = std::make_unique<MMDRigidBody>();
-		auto ret = rigidBody.get();
-		m_rigidBodys.emplace_back(std::move(rigidBody));
-
-		return ret;
-	}
-
-	MMDJoint *MMDPhysicsManager::AddJoint()
-	{
-		SABA_ASSERT(m_mmdPhysics != nullptr);
-		auto joint = std::make_unique<MMDJoint>();
-		auto ret = joint.get();
-		m_joints.emplace_back(std::move(joint));
-
-		return ret;
 	}
 
 	void MMDModel::SaveBaseAnimation()
@@ -140,6 +108,10 @@ namespace saba
 
 	namespace
 	{
+		glm::vec3 InvZ(const glm::vec3 &v)
+		{
+			return v * glm::vec3(1, 1, -1);
+		}
 		glm::mat3 InvZ(const glm::mat3 &m)
 		{
 			const glm::mat3 invZ = glm::scale(glm::mat4(1.0f), glm::vec3(1, 1, -1));
@@ -162,11 +134,7 @@ namespace saba
 
 		UpdateMorphAnimation();
 
-		UpdateNodeAnimation(false);
-
-		UpdatePhysicsAnimation(physicsElapsed);
-
-		UpdateNodeAnimation(true);
+		UpdateNodeAnimation(true, physicsElapsed);
 	}
 
 	void MMDModel::LoadPose(const VPDFile &vpd, int frameCount)
@@ -185,11 +153,12 @@ namespace saba
 			auto nodeIdx = GetNodeManager()->FindNodeIndex(bone.m_boneName);
 			if (MMDNodeManager::NPos != nodeIdx)
 			{
+				assert(false);
 				Pose pose;
 				pose.m_node = GetNodeManager()->GetMMDNode(bone.m_boneName);
-				pose.m_beginTranslate = pose.m_node->GetAnimationTranslate();
-				pose.m_endTranslate = bone.m_translate * glm::vec3(1, 1, -1);
-				pose.m_beginRotate = pose.m_node->GetAnimationRotate();
+				// pose.m_beginTranslate = pose.m_node->GetAnimationTranslate();
+				pose.m_endTranslate = InvZ(bone.m_translate);
+				// pose.m_beginRotate = pose.m_node->GetAnimationRotate();
 				pose.m_endRotate = InvZ(bone.m_quaternion);
 				poses.emplace_back(std::move(pose));
 			}
@@ -237,9 +206,7 @@ namespace saba
 			}
 
 			UpdateMorphAnimation();
-			UpdateNodeAnimation(false);
-			UpdatePhysicsAnimation(1.0f / 30.0f);
-			UpdateNodeAnimation(true);
+			UpdateNodeAnimation(true, 1.0f / 30.0f);
 
 			EndAnimation();
 		}
@@ -250,11 +217,6 @@ namespace saba
 	void MMDModel::UpdateAnimation()
 	{
 		UpdateMorphAnimation();
-		UpdateNodeAnimation(false);
-	}
-
-	void MMDModel::UpdatePhysics(float elapsed)
-	{
-		UpdatePhysicsAnimation(elapsed);
+		UpdateNodeAnimation(true, 0.0f);
 	}
 }

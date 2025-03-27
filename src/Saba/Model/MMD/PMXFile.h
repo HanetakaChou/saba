@@ -11,11 +11,119 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <unordered_set>
+#include <unordered_map>
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+using mcrt_string = std::string;
+
+template <typename T>
+using mcrt_vector = std::vector<T>;
+
+template <typename Key>
+using mcrt_unordered_set = std::unordered_set<Key, std::hash<Key>, std::equal_to<Key>>;
+
+template <typename Key, typename T>
+using mcrt_unordered_map = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>>;
+
+struct mmd_pmx_vec3_t
+{
+	float m_x;
+	float m_y;
+	float m_z;
+};
+
+struct mmd_pmx_bone_t
+{
+	mcrt_string m_name;
+	mmd_pmx_vec3_t m_translation;
+	uint32_t m_parent_index;
+	uint32_t m_transformation_hierarchy;
+	bool m_meta_physics;
+	bool m_append_rotation;
+	bool m_append_translation;
+	bool m_append_local;
+	uint32_t m_append_parent_index;
+	float m_append_rate;
+	bool m_ik;
+	uint32_t m_ik_end_effector_index;
+	mcrt_vector<uint32_t> m_ik_link_indices;
+	bool m_ik_two_links_hinge_limit_angle;
+	mmd_pmx_vec3_t m_ik_two_links_hinge_limit_angle_min;
+	mmd_pmx_vec3_t m_ik_two_links_hinge_limit_angle_max;
+};
+
+struct mmd_pmx_rigid_body_t
+{
+	mcrt_string m_name;
+	uint32_t m_bone_index;
+	uint32_t m_collision_filter_group;
+	uint32_t m_collision_filter_mask;
+	uint32_t m_shape_type;
+	mmd_pmx_vec3_t m_shape_size;
+	mmd_pmx_vec3_t m_translation;
+	mmd_pmx_vec3_t m_rotation;
+	float m_mass;
+	float m_linear_damping;
+	float m_angular_damping;
+	float m_friction;
+	float m_restitution;
+	uint32_t m_rigid_body_type;
+};
+
+struct mmd_pmx_constraint_t
+{
+	mcrt_string m_name;
+	uint32_t m_rigid_body_a_index;
+	uint32_t m_rigid_body_b_index;
+	mmd_pmx_vec3_t m_translation;
+	mmd_pmx_vec3_t m_rotation;
+	mmd_pmx_vec3_t m_translation_limit_min;
+	mmd_pmx_vec3_t m_translation_limit_max;
+	mmd_pmx_vec3_t m_rotation_limit_min;
+	mmd_pmx_vec3_t m_rotation_limit_max;
+};
+
+enum BRX_MOTION_JOINT_CONSTRAINT_TYPE : uint32_t
+{
+	BRX_JOINT_CONSTRAINT_COPY_TRANSFORM = 0,
+	BRX_JOINT_CONSTRAINT_INVERSE_KINEMATICS = 1
+};
+
+static constexpr uint32_t BRX_MOTION_UINT32_INDEX_INVALID = static_cast<uint32_t>(~static_cast<uint32_t>(0U));
+
+struct brx_motion_joint_constraint
+{
+	BRX_MOTION_JOINT_CONSTRAINT_TYPE m_constraint_type;
+
+	union
+	{
+		struct
+		{
+			uint32_t m_source_joint_index;
+			uint32_t m_source_weight_count;
+			float *m_source_weights;
+			uint32_t m_destination_joint_index;
+			bool m_copy_rotation;
+			bool m_copy_translation;
+		} m_copy_transform;
+
+		struct
+		{
+			uint32_t m_ik_end_effector_index;
+			uint32_t m_ik_joint_count;
+			uint32_t *m_ik_joint_indices;
+			uint32_t m_target_joint_index;
+			float m_ik_two_joints_hinge_joint_axis_local_space[3];
+			float m_cosine_max_ik_two_joints_hinge_joint_angle;
+			float m_cosine_min_ik_two_joints_hinge_joint_angle;
+		} m_inverse_kinematics;
+	};
+};
 
 namespace saba
 {

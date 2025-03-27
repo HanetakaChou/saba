@@ -202,41 +202,21 @@ namespace saba
 			MMDNode* clickNode = nullptr;
 			for (size_t nodeIdx = 0; nodeIdx < nodeMan->GetNodeCount(); nodeIdx++)
 			{
-				std::function<void(MMDNode*)> ViewNodes = [&ViewNodes, &clickNode, this](saba::MMDNode* node)
-				{
-					ImGuiTreeNodeFlags node_flags =
-						ImGuiTreeNodeFlags_OpenOnArrow |
-						ImGuiTreeNodeFlags_OpenOnDoubleClick |
-						((this->m_selectedNode == node) ? ImGuiTreeNodeFlags_Selected : 0);
-					if (node->GetChild() != nullptr)
-					{
-						if (ImGui::TreeNodeEx(node->GetName().c_str(), node_flags))
-						{
-							auto child = node->GetChild();
-							while (child != nullptr)
-							{
-								ViewNodes(child);
-								child = child->GetNext();
-							}
-							ImGui::TreePop();
-						}
-					}
-					else
-					{
-						node_flags |=
-							ImGuiTreeNodeFlags_Leaf |
-							ImGuiTreeNodeFlags_NoTreePushOnOpen;
-						ImGui::TreeNodeEx(node->GetName().c_str(), node_flags);
-					}
-					if (clickNode == nullptr && ImGui::IsItemClicked())
-					{
-						clickNode = node;
-					}
-				};
 				auto node = nodeMan->GetMMDNode(nodeIdx);
-				if (node->GetParent() == nullptr)
+
+				ImGuiTreeNodeFlags node_flags =
+					ImGuiTreeNodeFlags_OpenOnArrow |
+					ImGuiTreeNodeFlags_OpenOnDoubleClick |
+					((this->m_selectedNode == node) ? ImGuiTreeNodeFlags_Selected : 0);
+
+				node_flags |=
+					ImGuiTreeNodeFlags_Leaf |
+					ImGuiTreeNodeFlags_NoTreePushOnOpen;
+				ImGui::TreeNodeEx(node->GetName().c_str(), node_flags);
+
+				if (clickNode == nullptr && ImGui::IsItemClicked())
 				{
-					ViewNodes(node);
+					clickNode = node;
 				}
 			}
 
@@ -252,20 +232,6 @@ namespace saba
 			if (ImGui::Checkbox("Enable", &enabledPhysics))
 			{
 				m_mmdModel->EnablePhysics(enabledPhysics);
-			}
-			auto physics = m_mmdModel->GetMMDModel()->GetMMDPhysics();
-			float fps = physics->GetFPS();
-			if (ImGui::InputFloat("FPS", &fps, 0, 0, 1))
-			{
-				if (1 <= fps)
-				{
-					physics->SetFPS(fps);
-				}
-			}
-			int subStepCount = physics->GetMaxSubStepCount();
-			if (ImGui::SliderInt("Max Sub Step", &subStepCount, 1, 100))
-			{
-				physics->SetMaxSubStepCount(subStepCount);
 			}
 			ImGui::TreePop();
 		}

@@ -99,17 +99,8 @@ namespace saba
 
 		MMDPhysics *GetMMDPhysics();
 
-		MMDRigidBody *AddRigidBody();
-		std::vector<RigidBodyPtr> *GetRigidBodys() { return &m_rigidBodys; }
-
-		MMDJoint *AddJoint();
-		std::vector<JointPtr> *GetJoints() { return &m_joints; }
-
 	private:
 		std::unique_ptr<MMDPhysics> m_mmdPhysics;
-
-		std::vector<RigidBodyPtr> m_rigidBodys;
-		std::vector<JointPtr> m_joints;
 	};
 
 	struct MMDSubMesh
@@ -165,12 +156,9 @@ namespace saba
 		// ノードを更新する
 		[[deprecated("Please use UpdateAllAnimation() function")]]
 		void UpdateAnimation();
-		virtual void UpdateNodeAnimation(bool afterPhysicsAnim) = 0;
+		virtual void UpdateNodeAnimation(bool enablePhysics, float elapsed) = 0;
 		// Physicsを更新する
 		virtual void ResetPhysics() = 0;
-		[[deprecated("Please use UpdateAllAnimation() function")]]
-		void UpdatePhysics(float elapsed);
-		virtual void UpdatePhysicsAnimation(float elapsed) = 0;
 		// 頂点を更新する
 		virtual void Update() = 0;
 		virtual void SetParallelUpdateHint(uint32_t parallelCount) = 0;
@@ -261,9 +249,9 @@ namespace saba
 				return m_ikSolvers[idx].get();
 			}
 
-			IKSolverType *AddIKSolver()
+			IKSolverType *AddIKSolver(std::string const &name)
 			{
-				m_ikSolvers.emplace_back(std::make_unique<IKSolverType>());
+				m_ikSolvers.emplace_back(std::make_unique<IKSolverType>(name));
 				return m_ikSolvers[m_ikSolvers.size() - 1].get();
 			}
 

@@ -2383,44 +2383,8 @@ namespace saba
 
 	bool Viewer::LoadPMDFile(const std::string & filename)
 	{
-		std::shared_ptr<PMDModel> pmdModel = std::make_shared<PMDModel>();
-		std::string mmdDataDir = PathUtil::Combine(
-			m_context.GetResourceDir(),
-			"mmd"
-		);
-		pmdModel->SetParallelUpdateHint(m_mmdModelConfig.m_parallelUpdateCount);
-		if (!pmdModel->Load(filename, mmdDataDir))
-		{
-			SABA_WARN("PMD Load Fail.");
-			return false;
-		}
-
-		std::shared_ptr<GLMMDModel> glMMDModel = std::make_shared<GLMMDModel>();
-		if (!glMMDModel->Create(pmdModel))
-		{
-			SABA_WARN("GLMMDModel Create Fail.");
-			return false;
-		}
-
-		auto mmdDrawer = std::make_unique<GLMMDModelDrawer>(
-			m_mmdModelDrawContext.get(),
-			glMMDModel
-			);
-		if (!mmdDrawer->Create())
-		{
-			SABA_WARN("GLMMDModelDrawer Create Fail.");
-			return false;
-		}
-		m_modelDrawers.emplace_back(std::move(mmdDrawer));
-		m_selectedModelDrawer = m_modelDrawers[m_modelDrawers.size() - 1];
-		m_selectedModelDrawer->SetName(GetNewModelName());
-		m_selectedModelDrawer->SetBBox(pmdModel->GetBBoxMin(), pmdModel->GetBBoxMax());
-
-		InitializeScene();
-
-		m_prevTime = GetTime();
-
-		return true;
+		assert(false);
+		return false;
 	}
 
 	bool Viewer::LoadPMXFile(const std::string & filename)

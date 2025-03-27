@@ -2,6 +2,12 @@
 // Copyright(c) 2016-2017 benikabocha.
 // Distributed under the MIT License (http://opensource.org/licenses/MIT)
 //
+
+//
+// Copyright(c) HanetakaChou(YuqiaoZhang).
+// Distributed under the LGPL License (https://opensource.org/license/lgpl-2-1)
+//
+
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "PMXModel.h"
@@ -26,10 +32,33 @@
 #include <iomanip>
 #include <thread>
 #include <mutex>
-#include <condition_variable>
+// #include <condition_variable>
+
+#include <DirectXMath.h>
+
+static inline void internal_import_animation_skeleton(mcrt_vector<mmd_pmx_bone_t> const &in_mmd_model_nodes, mcrt_vector<uint32_t> &out_animation_skeleton_joint_parent_indices, mcrt_vector<uint32_t> &out_model_node_to_animation_skeleton_joint_map, mcrt_vector<uint32_t> &out_animation_skeleton_joint_to_model_node_map, mcrt_vector<DirectX::XMFLOAT4X4> &out_animation_skeleton_bind_pose_local_space, mcrt_vector<DirectX::XMFLOAT4X4> &out_animation_skeleton_bind_pose_model_space, mcrt_vector<brx_motion_joint_constraint> &out_animation_skeleton_joint_constraints, mcrt_vector<mcrt_vector<uint32_t>> &out_animation_skeleton_joint_constraints_storage);
 
 namespace saba
 {
+	namespace
+	{
+		glm::vec3 InvZ(const glm::vec3 &v)
+		{
+			return v * glm::vec3(1, 1, -1);
+		}
+		glm::mat3 InvZ(const glm::mat3 &m)
+		{
+			const glm::mat3 invZ = glm::scale(glm::mat4(1.0f), glm::vec3(1, 1, -1));
+			return invZ * m * invZ;
+		}
+		glm::quat InvZ(const glm::quat &q)
+		{
+			auto rot0 = glm::mat3_cast(q);
+			auto rot1 = InvZ(rot0);
+			return glm::quat_cast(rot1);
+		}
+	}
+
 	PMXModel::PMXModel()
 		: m_parallelUpdateCount(0)
 	{
@@ -52,55 +81,14 @@ namespace saba
 
 		BeginAnimation();
 
-		for (auto &node : (*m_nodeMan.GetNodes()))
-		{
-			node->UpdateLocalTransform();
-		}
-
 		for (auto &morph : (*m_morphMan.GetMorphs()))
 		{
 			morph->SetWeight(0);
 		}
 
-		for (auto &ikSolver : (*m_ikSolverMan.GetIKSolvers()))
-		{
-			ikSolver->Enable(true);
-		}
-
-		for (const auto &node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
-
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->GetAppendNode() != nullptr)
-			{
-				pmxNode->UpdateAppendTransform();
-				pmxNode->UpdateGlobalTransform();
-			}
-			if (pmxNode->GetIKSolver() != nullptr)
-			{
-				auto ikSolver = pmxNode->GetIKSolver();
-				ikSolver->Solve();
-				pmxNode->UpdateGlobalTransform();
-			}
-		}
-
-		for (const auto &node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
-
 		EndAnimation();
 
-		ResetPhysics();
+		// ResetPhysics();
 	}
 
 	void PMXModel::BeginAnimation()
@@ -109,6 +97,7 @@ namespace saba
 		{
 			node->BeginUpdateTransform();
 		}
+
 		size_t vtxCount = m_morphPositions.size();
 		for (size_t vtxIdx = 0; vtxIdx < vtxCount; vtxIdx++)
 		{
@@ -140,143 +129,189 @@ namespace saba
 		EndMorphMaterial();
 	}
 
-	void PMXModel::UpdateNodeAnimation(bool afterPhysicsAnim)
+	static inline glm::mat4x4 calculate_transform_model_space(uint32_t const *const in_animation_skeleton_joint_parent_indices, glm::mat4x4 const *const in_animation_skeleton_local_space, uint32_t const in_animation_skeleton_joint_index)
 	{
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
-				continue;
-			}
+		uint32_t current_animation_skeleton_joint_index = in_animation_skeleton_joint_index;
 
-			pmxNode->UpdateLocalTransform();
+		mcrt_vector<uint32_t> ancestors;
+		while (BRX_MOTION_UINT32_INDEX_INVALID != current_animation_skeleton_joint_index)
+		{
+			ancestors.push_back(current_animation_skeleton_joint_index);
+			current_animation_skeleton_joint_index = in_animation_skeleton_joint_parent_indices[current_animation_skeleton_joint_index];
 		}
 
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
-				continue;
-			}
+		assert(!ancestors.empty());
+		glm::mat4 model_space = in_animation_skeleton_local_space[ancestors.back()];
+		ancestors.pop_back();
 
-			if (pmxNode->GetParent() == nullptr)
+		while (!ancestors.empty())
+		{
+			model_space = model_space * in_animation_skeleton_local_space[ancestors.back()];
+			ancestors.pop_back();
+		}
+
+		return model_space;
+	}
+
+	void PMXModel::UpdateNodeAnimation(bool enablePhysics, float elapsed)
+	{
+		mcrt_vector<glm::mat4x4> animation_skeleton_local_space(static_cast<size_t>(m_nodeMan.GetNodeCount()));
+		for (size_t animation_skeleton_joint_index = 0; animation_skeleton_joint_index < m_nodeMan.GetNodeCount(); ++animation_skeleton_joint_index)
+		{
+			uint32_t const model_node_index = this->m_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_index];
+			PMXNode const *const animation_node = m_nodeMan.GetNode(model_node_index);
+			assert(!animation_node->IsDeformAfterPhysics());
+			animation_skeleton_local_space[animation_skeleton_joint_index] = animation_node->GetLocalTransform();
+		}
+
+		for (brx_motion_joint_constraint const &animation_skeleton_joint_constraint : this->m_animation_skeleton_joint_constraints)
+		{
+			if (BRX_JOINT_CONSTRAINT_COPY_TRANSFORM == animation_skeleton_joint_constraint.m_constraint_type)
 			{
-				pmxNode->UpdateGlobalTransform();
+				glm::quat source_rotation_local_space;
+				glm::vec3 source_translation_local_space;
+				{
+					glm::mat4x4 source_transform_local_space = animation_skeleton_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_source_joint_index];
+
+					source_translation_local_space = glm::vec3(source_transform_local_space[3]);
+
+					glm::vec3 scale = glm::vec3(
+						glm::length(glm::vec3(source_transform_local_space[0])),
+						glm::length(glm::vec3(source_transform_local_space[1])),
+						glm::length(glm::vec3(source_transform_local_space[2])));
+					assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+					source_rotation_local_space = glm::quat_cast(glm::mat3(
+						glm::vec3(source_transform_local_space[0]) / scale.x,
+						glm::vec3(source_transform_local_space[1]) / scale.y,
+						glm::vec3(source_transform_local_space[2]) / scale.z));
+				}
+
+				glm::quat destination_rotation_local_space;
+				glm::vec3 destination_translation_local_space;
+				{
+					glm::mat4x4 destination_transform_local_space = animation_skeleton_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_destination_joint_index];
+
+					destination_translation_local_space = glm::vec3(destination_transform_local_space[3]);
+
+					glm::vec3 scale = glm::vec3(
+						glm::length(glm::vec3(destination_transform_local_space[0])),
+						glm::length(glm::vec3(destination_transform_local_space[1])),
+						glm::length(glm::vec3(destination_transform_local_space[2])));
+					assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+					destination_rotation_local_space = glm::quat_cast(glm::mat3(
+						glm::vec3(destination_transform_local_space[0]) / scale.x,
+						glm::vec3(destination_transform_local_space[1]) / scale.y,
+						glm::vec3(destination_transform_local_space[2]) / scale.z));
+				}
+
+				if (animation_skeleton_joint_constraint.m_copy_transform.m_copy_rotation)
+				{
+					// bind pose rotation always zero
+					// assert(glm::all(glm::epsilonEqual(source_node->GetInitialRotate(), glm::quat(1.0F, 0.0F, 0.0F, 0.0F), 1E-6F)));
+
+					glm::quat append_rotation = source_rotation_local_space;
+
+					for (uint32_t source_weight_index = 0U; source_weight_index < animation_skeleton_joint_constraint.m_copy_transform.m_source_weight_count; ++source_weight_index)
+					{
+						append_rotation = glm::slerp(glm::quat(1.0F, 0.0F, 0.0F, 0.0F), append_rotation, animation_skeleton_joint_constraint.m_copy_transform.m_source_weights[source_weight_index]);
+					}
+
+					destination_rotation_local_space = (destination_rotation_local_space * append_rotation);
+				}
+
+				if (animation_skeleton_joint_constraint.m_copy_transform.m_copy_translation)
+				{
+					assert(false);
+				}
+
+				glm::mat4 destination_transform_local_space = glm::translate(glm::mat4(1), destination_translation_local_space) * glm::mat4_cast(destination_rotation_local_space);
+
+				animation_skeleton_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_destination_joint_index] = destination_transform_local_space;
+			}
+			else
+			{
+				assert(BRX_JOINT_CONSTRAINT_INVERSE_KINEMATICS == animation_skeleton_joint_constraint.m_constraint_type);
+
+				if (static_cast<MMDIKManager *>(&this->m_ikSolverMan)->GetMMDIKSolver(this->m_nodeMan.GetNode(this->m_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_constraint.m_inverse_kinematics.m_target_joint_index])->GetName())->Enabled())
+				{
+					glm::vec3 const target_position_model_space = calculate_transform_model_space(this->m_animation_skeleton_joint_parent_indices.data(), animation_skeleton_local_space.data(), animation_skeleton_joint_constraint.m_inverse_kinematics.m_target_joint_index)[3];
+
+					glm::mat4 const end_effector_transform_local_space = animation_skeleton_local_space[animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_end_effector_index];
+
+					uint32_t const ik_joint_count = animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_joint_count;
+
+					std::vector<glm::mat4x4> ik_joints_local_space(static_cast<size_t>(ik_joint_count));
+					std::vector<glm::mat4x4> ik_joints_model_space(static_cast<size_t>(ik_joint_count));
+
+					// TODO: check parent index consistent
+					// TODO: check ik joint index out of bound
+
+					for (uint32_t ik_joint_index = 0U; ik_joint_index < ik_joint_count; ++ik_joint_index)
+					{
+						uint32_t const ik_joint_animation_skeleton_joint_index = animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_joint_indices[ik_joint_index];
+
+						ik_joints_local_space[ik_joint_index] = animation_skeleton_local_space[ik_joint_animation_skeleton_joint_index];
+
+						ik_joints_model_space[ik_joint_index] = calculate_transform_model_space(this->m_animation_skeleton_joint_parent_indices.data(), animation_skeleton_local_space.data(), ik_joint_animation_skeleton_joint_index);
+					}
+
+					glm::vec3 const two_joints_hinge_joint_axis_local_space(animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[0], animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[1], animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[2]);
+					float const two_joints_cosine_max_hinge_joint_angle = animation_skeleton_joint_constraint.m_inverse_kinematics.m_cosine_max_ik_two_joints_hinge_joint_angle;
+					float const two_joints_cosine_min_hinge_joint_angle = animation_skeleton_joint_constraint.m_inverse_kinematics.m_cosine_min_ik_two_joints_hinge_joint_angle;
+					MMDIkSolver::Solve(two_joints_hinge_joint_axis_local_space, two_joints_cosine_max_hinge_joint_angle, two_joints_cosine_min_hinge_joint_angle, target_position_model_space, end_effector_transform_local_space, ik_joint_count, ik_joints_local_space.data(), ik_joints_model_space.data());
+
+					for (uint32_t ik_joint_index = 0U; ik_joint_index < ik_joint_count; ++ik_joint_index)
+					{
+						glm::quat updated_current_joint_local_space_rotation = glm::quat_cast(glm::mat3(ik_joints_local_space[ik_joint_index]));
+
+						uint32_t const animation_skeleton_joint_index = animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_joint_indices[ik_joint_index];
+
+						animation_skeleton_local_space[animation_skeleton_joint_index] = ik_joints_local_space[ik_joint_index];
+					}
+				}
 			}
 		}
 
-		for (auto pmxNode : m_sortedNodes)
+		mcrt_vector<glm::mat4x4> animation_skeleton_model_space(static_cast<size_t>(m_nodeMan.GetNodeCount()));
+		for (uint32_t current_animation_skeleton_joint_index = 0; current_animation_skeleton_joint_index < static_cast<uint32_t>(m_nodeMan.GetNodeCount()); ++current_animation_skeleton_joint_index)
 		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
+			uint32_t const parent_animation_skeleton_joint_index = this->m_animation_skeleton_joint_parent_indices[current_animation_skeleton_joint_index];
+			if (BRX_MOTION_UINT32_INDEX_INVALID != parent_animation_skeleton_joint_index)
 			{
-				continue;
+				assert(parent_animation_skeleton_joint_index < current_animation_skeleton_joint_index);
+				animation_skeleton_model_space[current_animation_skeleton_joint_index] = animation_skeleton_model_space[parent_animation_skeleton_joint_index] * animation_skeleton_local_space[current_animation_skeleton_joint_index];
 			}
-
-			if (pmxNode->GetAppendNode() != nullptr)
+			else
 			{
-				pmxNode->UpdateAppendTransform();
-				pmxNode->UpdateGlobalTransform();
-			}
-			if (pmxNode->GetIKSolver() != nullptr)
-			{
-				auto ikSolver = pmxNode->GetIKSolver();
-				ikSolver->Solve();
-				pmxNode->UpdateGlobalTransform();
+				animation_skeleton_model_space[current_animation_skeleton_joint_index] = animation_skeleton_local_space[current_animation_skeleton_joint_index];
 			}
 		}
 
-		for (auto pmxNode : m_sortedNodes)
+		if (enablePhysics)
 		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
-				continue;
-			}
+			MMDPhysics *physics = this->GetPhysicsManager()->GetMMDPhysics();
 
-			if (pmxNode->GetParent() == nullptr)
-			{
-				pmxNode->UpdateGlobalTransform();
-			}
+			physics->AnimationToRagdoll(animation_skeleton_model_space.data());
+
+			physics->Update(elapsed);
+
+			physics->RagdollToAnimation(animation_skeleton_model_space.data());
+		}
+
+		for (uint32_t animation_skeleton_joint_index = 0; animation_skeleton_joint_index < static_cast<uint32_t>(m_nodeMan.GetNodeCount()); ++animation_skeleton_joint_index)
+		{
+			uint32_t const model_node_index = this->m_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_index];
+			PMXNode *const animation_node = m_nodeMan.GetNode(model_node_index);
+			assert(!animation_node->IsDeformAfterPhysics());
+			animation_node->SetGlobalTransform(animation_skeleton_model_space[animation_skeleton_joint_index]);
 		}
 	}
 
 	void PMXModel::ResetPhysics()
 	{
-		MMDPhysicsManager *physicsMan = GetPhysicsManager();
-		auto physics = physicsMan->GetMMDPhysics();
-
-		if (physics == nullptr)
-		{
-			return;
-		}
-
-		auto rigidbodys = physicsMan->GetRigidBodys();
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->SetActivation(false);
-			rb->ResetTransform();
-		}
-
-		physics->Update(1.0f / 60.0f);
-
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->ReflectGlobalTransform();
-		}
-
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->CalcLocalTransform();
-		}
-
-		for (const auto &node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
-
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->Reset(physics);
-		}
-	}
-
-	void PMXModel::UpdatePhysicsAnimation(float elapsed)
-	{
-		MMDPhysicsManager *physicsMan = GetPhysicsManager();
-		auto physics = physicsMan->GetMMDPhysics();
-
-		if (physics == nullptr)
-		{
-			return;
-		}
-
-		auto rigidbodys = physicsMan->GetRigidBodys();
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->SetActivation(true);
-		}
-
-		physics->Update(elapsed);
-
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->ReflectGlobalTransform();
-		}
-
-		for (auto &rb : (*rigidbodys))
-		{
-			rb->CalcLocalTransform();
-		}
-
-		for (const auto &node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
+		assert(false);
 	}
 
 	void PMXModel::Update()
@@ -348,8 +383,8 @@ namespace saba
 		bool infoQDEF = false;
 		for (const auto &v : pmx.m_vertices)
 		{
-			glm::vec3 pos = v.m_position * glm::vec3(1, 1, -1);
-			glm::vec3 nor = v.m_normal * glm::vec3(1, 1, -1);
+			glm::vec3 pos = InvZ(v.m_position);
+			glm::vec3 nor = InvZ(v.m_normal);
 			glm::vec2 uv = glm::vec2(v.m_uv.x, 1.0f - v.m_uv.y);
 			m_positions.push_back(pos);
 			m_normals.push_back(nor);
@@ -393,9 +428,9 @@ namespace saba
 					auto w0 = v.m_boneWeights[0];
 					auto w1 = 1.0f - w0;
 
-					auto center = v.m_sdefC * glm::vec3(1, 1, -1);
-					auto r0 = v.m_sdefR0 * glm::vec3(1, 1, -1);
-					auto r1 = v.m_sdefR1 * glm::vec3(1, 1, -1);
+					auto center = InvZ(v.m_sdefC);
+					auto r0 = InvZ(v.m_sdefR0);
+					auto r1 = InvZ(v.m_sdefR1);
 					auto rw = r0 * w0 + r1 * w1;
 					r0 = center + r0 - rw;
 					r1 = center + r1 - rw;
@@ -581,137 +616,11 @@ namespace saba
 		{
 			auto *node = m_nodeMan.AddNode();
 			node->SetName(bone.m_name);
-		}
-		for (size_t i = 0; i < pmx.m_bones.size(); i++)
-		{
-			int32_t boneIndex = (int32_t)(pmx.m_bones.size() - i - 1);
-			const auto &bone = pmx.m_bones[boneIndex];
-			auto *node = m_nodeMan.GetNode(boneIndex);
 
-			// Check if the node is looping
-			bool isLooping = false;
-			if (bone.m_parentBoneIndex != -1)
-			{
-				MMDNode *parent = m_nodeMan.GetNode(bone.m_parentBoneIndex);
-				while (parent != nullptr)
-				{
-					if (parent == node)
-					{
-						isLooping = true;
-						SABA_ERROR("This bone hierarchy is a loop: bone={}", boneIndex);
-						break;
-					}
-					parent = parent->GetParent();
-				}
-			}
-
-			// Check parent node index
-			if (bone.m_parentBoneIndex != -1)
-			{
-				if (bone.m_parentBoneIndex >= boneIndex)
-				{
-					SABA_WARN("The parent index of this node is big: bone={}", boneIndex);
-				}
-			}
-
-			if ((bone.m_parentBoneIndex != -1) && !isLooping)
-			{
-				const auto &parentBone = pmx.m_bones[bone.m_parentBoneIndex];
-				auto *parent = m_nodeMan.GetNode(bone.m_parentBoneIndex);
-				parent->AddChild(node);
-				auto localPos = bone.m_position - parentBone.m_position;
-				localPos.z *= -1;
-				node->SetTranslate(localPos);
-			}
-			else
-			{
-				auto localPos = bone.m_position;
-				localPos.z *= -1;
-				node->SetTranslate(localPos);
-			}
-			glm::mat4 init = glm::translate(
-				glm::mat4(1),
-				bone.m_position * glm::vec3(1, 1, -1));
-			node->SetGlobalTransform(init);
-			node->CalculateInverseInitTransform();
-
-			node->SetDeformDepth(bone.m_deformDepth);
-			bool deformAfterPhysics = !!((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::DeformAfterPhysics);
+			bool const deformAfterPhysics = !!((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::DeformAfterPhysics);
 			node->EnableDeformAfterPhysics(deformAfterPhysics);
-			bool appendRotate = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendRotate) != 0;
-			bool appendTranslate = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendTranslate) != 0;
-			node->EnableAppendRotate(appendRotate);
-			node->EnableAppendTranslate(appendTranslate);
-			if ((appendRotate || appendTranslate) && (bone.m_appendBoneIndex != -1))
-			{
-				if (bone.m_appendBoneIndex >= boneIndex)
-				{
-					SABA_WARN("The parent(morph assignment) index of this node is big: bone={}", boneIndex);
-				}
-				bool appendLocal = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendLocal) != 0;
-				auto appendNode = m_nodeMan.GetNode(bone.m_appendBoneIndex);
-				float appendWeight = bone.m_appendWeight;
-				node->EnableAppendLocal(appendLocal);
-				node->SetAppendNode(appendNode);
-				node->SetAppendWeight(appendWeight);
-			}
-			node->SaveInitialTRS();
 		}
 		m_transforms.resize(m_nodeMan.GetNodeCount());
-
-		m_sortedNodes.clear();
-		m_sortedNodes.reserve(m_nodeMan.GetNodeCount());
-		auto *pmxNodes = m_nodeMan.GetNodes();
-		for (auto &pmxNode : (*pmxNodes))
-		{
-			m_sortedNodes.push_back(pmxNode.get());
-		}
-		std::stable_sort(
-			m_sortedNodes.begin(),
-			m_sortedNodes.end(),
-			[](const PMXNode *x, const PMXNode *y)
-			{ return x->GetDeformdepth() < y->GetDeformdepth(); });
-
-		// IK
-		for (size_t i = 0; i < pmx.m_bones.size(); i++)
-		{
-			const auto &bone = pmx.m_bones[i];
-			if ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::IK)
-			{
-				auto solver = m_ikSolverMan.AddIKSolver();
-				auto *ikNode = m_nodeMan.GetNode(i);
-				solver->SetIKNode(ikNode);
-				ikNode->SetIKSolver(solver);
-
-				if ((bone.m_ikTargetBoneIndex < 0) || (bone.m_ikTargetBoneIndex >= (int)m_nodeMan.GetNodeCount()))
-				{
-					SABA_ERROR("Wrong IK Target: bone={} target={}", i, bone.m_ikTargetBoneIndex);
-					continue;
-				}
-
-				auto *targetNode = m_nodeMan.GetNode(bone.m_ikTargetBoneIndex);
-				solver->SetTargetNode(targetNode);
-
-				for (const auto &ikLink : bone.m_ikLinks)
-				{
-					auto *linkNode = m_nodeMan.GetNode(ikLink.m_ikBoneIndex);
-					if (ikLink.m_enableLimit)
-					{
-						glm::vec3 limitMax = ikLink.m_limitMin * glm::vec3(-1);
-						glm::vec3 limitMin = ikLink.m_limitMax * glm::vec3(-1);
-						solver->AddIKChain(linkNode, true, limitMin, limitMax);
-					}
-					else
-					{
-						solver->AddIKChain(linkNode);
-					}
-					linkNode->EnableIK(true);
-				}
-
-				solver->SetIterateCount(bone.m_ikIterationCount);
-				solver->SetLimitAngle(bone.m_ikLimit);
-			}
-		}
 
 		// Morph
 		for (const auto &pmxMorph : pmx.m_morphs)
@@ -767,12 +676,8 @@ namespace saba
 				{
 					BoneMorphElement boneMorphElem;
 					boneMorphElem.m_node = m_nodeMan.GetMMDNode(pmxBoneMorphElem.m_boneIndex);
-					boneMorphElem.m_position = pmxBoneMorphElem.m_position * glm::vec3(1, 1, -1);
-					const glm::quat q = pmxBoneMorphElem.m_quaternion;
-					auto invZ = glm::mat3(glm::scale(glm::mat4(1), glm::vec3(1, 1, -1)));
-					auto rot0 = glm::mat3_cast(q);
-					auto rot1 = invZ * rot0 * invZ;
-					boneMorphElem.m_rotate = glm::quat_cast(rot1);
+					boneMorphElem.m_position = InvZ(pmxBoneMorphElem.m_position);
+					boneMorphElem.m_rotate = InvZ(pmxBoneMorphElem.m_quaternion);
 					boneMorphData.m_boneMorphs.push_back(boneMorphElem);
 				}
 				m_boneMorphDatas.emplace_back(boneMorphData);
@@ -847,49 +752,133 @@ namespace saba
 			return false;
 		}
 
-		for (const auto &pmxRB : pmx.m_rigidbodies)
-		{
-			auto rb = m_physicsMan.AddRigidBody();
-			MMDNode *node = nullptr;
-			if (pmxRB.m_boneIndex != -1)
-			{
-				node = m_nodeMan.GetMMDNode(pmxRB.m_boneIndex);
-			}
-			if (!rb->Create(pmxRB, this, node))
-			{
-				SABA_ERROR("Create Rigid Body Fail.\n");
-				return false;
-			}
-			m_physicsMan.GetMMDPhysics()->AddRigidBody(rb);
-		}
+		uint32_t const model_node_count = pmx.m_bones.size();
 
-		for (const auto &pmxJoint : pmx.m_joints)
+		mcrt_vector<mmd_pmx_bone_t> mmd_model_nodes(static_cast<size_t>(model_node_count));
+		for (uint32_t model_node_index = 0U; model_node_index < pmx.m_bones.size(); ++model_node_index)
 		{
-			if (pmxJoint.m_rigidbodyAIndex != -1 &&
-				pmxJoint.m_rigidbodyBIndex != -1 &&
-				pmxJoint.m_rigidbodyAIndex != pmxJoint.m_rigidbodyBIndex)
+			mmd_model_nodes[model_node_index].m_name = pmx.m_bones[model_node_index].m_name;
+			mmd_model_nodes[model_node_index].m_translation.m_x = pmx.m_bones[model_node_index].m_position.x;
+			mmd_model_nodes[model_node_index].m_translation.m_y = pmx.m_bones[model_node_index].m_position.y;
+			mmd_model_nodes[model_node_index].m_translation.m_z = pmx.m_bones[model_node_index].m_position.z;
+			mmd_model_nodes[model_node_index].m_parent_index = pmx.m_bones[model_node_index].m_parentBoneIndex;
+			mmd_model_nodes[model_node_index].m_transformation_hierarchy = pmx.m_bones[model_node_index].m_deformDepth;
+			mmd_model_nodes[model_node_index].m_meta_physics = (0 != ((uint16_t)pmx.m_bones[model_node_index].m_boneFlag & (uint16_t)PMXBoneFlags::DeformAfterPhysics));
+			mmd_model_nodes[model_node_index].m_append_rotation = (0 != ((uint16_t)pmx.m_bones[model_node_index].m_boneFlag & (uint16_t)PMXBoneFlags::AppendRotate));
+			mmd_model_nodes[model_node_index].m_append_translation = (0 != ((uint16_t)pmx.m_bones[model_node_index].m_boneFlag & (uint16_t)PMXBoneFlags::AppendTranslate));
+			mmd_model_nodes[model_node_index].m_append_local = (0 != ((uint16_t)pmx.m_bones[model_node_index].m_boneFlag & (uint16_t)PMXBoneFlags::AppendLocal));
+			mmd_model_nodes[model_node_index].m_append_parent_index = pmx.m_bones[model_node_index].m_appendBoneIndex;
+			mmd_model_nodes[model_node_index].m_append_rate = pmx.m_bones[model_node_index].m_appendWeight;
+			mmd_model_nodes[model_node_index].m_ik = (0 != ((uint16_t)pmx.m_bones[model_node_index].m_boneFlag & (uint16_t)PMXBoneFlags::IK));
+			mmd_model_nodes[model_node_index].m_ik_end_effector_index = pmx.m_bones[model_node_index].m_ikTargetBoneIndex;
+
+			uint32_t const ik_joint_count = pmx.m_bones[model_node_index].m_ikLinks.size();
+
+			mmd_model_nodes[model_node_index].m_ik_link_indices.resize(ik_joint_count);
+
+			uint32_t current_joint_index_plus_1 = ik_joint_count;
+			for (uint32_t ik_joint_index = 0U; ik_joint_index < ik_joint_count; ++ik_joint_index)
 			{
-				auto joint = m_physicsMan.AddJoint();
-				MMDNode *node = nullptr;
-				auto rigidBodys = m_physicsMan.GetRigidBodys();
-				bool ret = joint->CreateJoint(
-					pmxJoint,
-					(*rigidBodys)[pmxJoint.m_rigidbodyAIndex].get(),
-					(*rigidBodys)[pmxJoint.m_rigidbodyBIndex].get());
-				if (!ret)
+				uint32_t const current_joint_index = current_joint_index_plus_1 - 1U;
+
+				mmd_model_nodes[model_node_index].m_ik_link_indices[current_joint_index] = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_ikBoneIndex;
+
+				constexpr uint32_t const hinge_joint_index = 1U;
+				if (2U == ik_joint_count && hinge_joint_index == current_joint_index)
 				{
-					SABA_ERROR("Create Joint Fail.\n");
-					return false;
+					mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle = (0U != pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_enableLimit);
+
+					if (mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle)
+					{
+						mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_limitMin.x;
+						mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_limitMin.y;
+						mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_limitMin.z;
+
+						mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_limitMax.x;
+						mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_limitMax.y;
+						mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z = pmx.m_bones[model_node_index].m_ikLinks[ik_joint_index].m_limitMax.z;
+					}
 				}
-				m_physicsMan.GetMMDPhysics()->AddJoint(joint);
-			}
-			else
-			{
-				SABA_WARN("Illegal Joint [{}]", pmxJoint.m_name.c_str());
+
+				--current_joint_index_plus_1;
 			}
 		}
 
-		ResetPhysics();
+		mcrt_vector<mmd_pmx_rigid_body_t> mmd_rigid_bodies(static_cast<size_t>(pmx.m_rigidbodies.size()));
+		for (uint32_t rigid_body_index = 0U; rigid_body_index < pmx.m_rigidbodies.size(); ++rigid_body_index)
+		{
+			mmd_rigid_bodies[rigid_body_index].m_name = pmx.m_rigidbodies[rigid_body_index].m_name;
+			mmd_rigid_bodies[rigid_body_index].m_bone_index = pmx.m_rigidbodies[rigid_body_index].m_boneIndex;
+			mmd_rigid_bodies[rigid_body_index].m_collision_filter_group = pmx.m_rigidbodies[rigid_body_index].m_group;
+			mmd_rigid_bodies[rigid_body_index].m_collision_filter_mask = pmx.m_rigidbodies[rigid_body_index].m_collisionGroup;
+			mmd_rigid_bodies[rigid_body_index].m_shape_type = static_cast<uint32_t>(pmx.m_rigidbodies[rigid_body_index].m_shape);
+			mmd_rigid_bodies[rigid_body_index].m_shape_size.m_x = pmx.m_rigidbodies[rigid_body_index].m_shapeSize.x;
+			mmd_rigid_bodies[rigid_body_index].m_shape_size.m_y = pmx.m_rigidbodies[rigid_body_index].m_shapeSize.y;
+			mmd_rigid_bodies[rigid_body_index].m_shape_size.m_z = pmx.m_rigidbodies[rigid_body_index].m_shapeSize.z;
+			mmd_rigid_bodies[rigid_body_index].m_translation.m_x = pmx.m_rigidbodies[rigid_body_index].m_translate.x;
+			mmd_rigid_bodies[rigid_body_index].m_translation.m_y = pmx.m_rigidbodies[rigid_body_index].m_translate.y;
+			mmd_rigid_bodies[rigid_body_index].m_translation.m_z = pmx.m_rigidbodies[rigid_body_index].m_translate.z;
+			mmd_rigid_bodies[rigid_body_index].m_rotation.m_x = pmx.m_rigidbodies[rigid_body_index].m_rotate.x;
+			mmd_rigid_bodies[rigid_body_index].m_rotation.m_y = pmx.m_rigidbodies[rigid_body_index].m_rotate.y;
+			mmd_rigid_bodies[rigid_body_index].m_rotation.m_z = pmx.m_rigidbodies[rigid_body_index].m_rotate.z;
+			mmd_rigid_bodies[rigid_body_index].m_mass = pmx.m_rigidbodies[rigid_body_index].m_mass;
+			mmd_rigid_bodies[rigid_body_index].m_linear_damping = pmx.m_rigidbodies[rigid_body_index].m_translateDimmer;
+			mmd_rigid_bodies[rigid_body_index].m_angular_damping = pmx.m_rigidbodies[rigid_body_index].m_rotateDimmer;
+			mmd_rigid_bodies[rigid_body_index].m_friction = pmx.m_rigidbodies[rigid_body_index].m_friction;
+			mmd_rigid_bodies[rigid_body_index].m_restitution = pmx.m_rigidbodies[rigid_body_index].m_repulsion;
+			mmd_rigid_bodies[rigid_body_index].m_rigid_body_type = static_cast<uint32_t>(pmx.m_rigidbodies[rigid_body_index].m_op);
+		}
+
+		mcrt_vector<mmd_pmx_constraint_t> mmd_joints(static_cast<size_t>(pmx.m_joints.size()));
+		for (uint32_t joint_index = 0U; joint_index < pmx.m_joints.size(); ++joint_index)
+		{
+			mmd_joints[joint_index].m_name = pmx.m_joints[joint_index].m_name;
+			mmd_joints[joint_index].m_rigid_body_a_index = pmx.m_joints[joint_index].m_rigidbodyAIndex;
+			mmd_joints[joint_index].m_rigid_body_b_index = pmx.m_joints[joint_index].m_rigidbodyBIndex;
+			mmd_joints[joint_index].m_translation.m_x = pmx.m_joints[joint_index].m_translate.x;
+			mmd_joints[joint_index].m_translation.m_y = pmx.m_joints[joint_index].m_translate.y;
+			mmd_joints[joint_index].m_translation.m_z = pmx.m_joints[joint_index].m_translate.z;
+			mmd_joints[joint_index].m_rotation.m_x = pmx.m_joints[joint_index].m_rotate.x;
+			mmd_joints[joint_index].m_rotation.m_y = pmx.m_joints[joint_index].m_rotate.y;
+			mmd_joints[joint_index].m_rotation.m_z = pmx.m_joints[joint_index].m_rotate.z;
+			mmd_joints[joint_index].m_translation_limit_min.m_x = pmx.m_joints[joint_index].m_translateLowerLimit.x;
+			mmd_joints[joint_index].m_translation_limit_min.m_y = pmx.m_joints[joint_index].m_translateLowerLimit.y;
+			mmd_joints[joint_index].m_translation_limit_min.m_z = pmx.m_joints[joint_index].m_translateLowerLimit.z;
+			mmd_joints[joint_index].m_translation_limit_max.m_x = pmx.m_joints[joint_index].m_translateUpperLimit.x;
+			mmd_joints[joint_index].m_translation_limit_max.m_y = pmx.m_joints[joint_index].m_translateUpperLimit.y;
+			mmd_joints[joint_index].m_translation_limit_max.m_z = pmx.m_joints[joint_index].m_translateUpperLimit.z;
+			mmd_joints[joint_index].m_rotation_limit_min.m_x = pmx.m_joints[joint_index].m_rotateLowerLimit.x;
+			mmd_joints[joint_index].m_rotation_limit_min.m_y = pmx.m_joints[joint_index].m_rotateLowerLimit.y;
+			mmd_joints[joint_index].m_rotation_limit_min.m_z = pmx.m_joints[joint_index].m_rotateLowerLimit.z;
+			mmd_joints[joint_index].m_rotation_limit_max.m_x = pmx.m_joints[joint_index].m_rotateUpperLimit.x;
+			mmd_joints[joint_index].m_rotation_limit_max.m_y = pmx.m_joints[joint_index].m_rotateUpperLimit.y;
+			mmd_joints[joint_index].m_rotation_limit_max.m_z = pmx.m_joints[joint_index].m_rotateUpperLimit.z;
+		}
+
+		mcrt_vector<DirectX::XMFLOAT4X4> animation_skeleton_bind_pose_local_space;
+		mcrt_vector<DirectX::XMFLOAT4X4> animation_skeleton_bind_pose_model_space;
+		internal_import_animation_skeleton(mmd_model_nodes, this->m_animation_skeleton_joint_parent_indices, this->m_model_node_to_animation_skeleton_joint_map, this->m_animation_skeleton_joint_to_model_node_map, animation_skeleton_bind_pose_local_space, animation_skeleton_bind_pose_model_space, this->m_animation_skeleton_joint_constraints, this->m_animation_skeleton_joint_constraints_storage);
+
+		for (size_t animation_skeleton_joint_index = 0; animation_skeleton_joint_index < m_nodeMan.GetNodeCount(); ++animation_skeleton_joint_index)
+		{
+			uint32_t const model_node_index = this->m_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_index];
+			PMXNode *const animation_node = m_nodeMan.GetNode(model_node_index);
+
+			animation_node->SetLocalTransform(*reinterpret_cast<glm::mat4x4 const *>(&animation_skeleton_bind_pose_local_space[animation_skeleton_joint_index]));
+			animation_node->SetGlobalTransform(*reinterpret_cast<glm::mat4x4 const *>(&animation_skeleton_bind_pose_model_space[animation_skeleton_joint_index]));
+			animation_node->CalculateInverseInitTransform();
+			animation_node->SaveInitialTRS();
+		}
+
+		for (brx_motion_joint_constraint const &animation_skeleton_joint_constraint : this->m_animation_skeleton_joint_constraints)
+		{
+			if (BRX_JOINT_CONSTRAINT_INVERSE_KINEMATICS == animation_skeleton_joint_constraint.m_constraint_type)
+			{
+				m_ikSolverMan.AddIKSolver(this->m_nodeMan.GetNode(this->m_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_constraint.m_inverse_kinematics.m_target_joint_index])->GetName());
+			}
+		}
+
+		m_physicsMan.GetMMDPhysics()->InitRagdoll(mmd_rigid_bodies, mmd_joints, this->m_model_node_to_animation_skeleton_joint_map.data(), reinterpret_cast<glm::mat4x4 *>(animation_skeleton_bind_pose_model_space.data()));
 
 		SetupParallelUpdate();
 
@@ -1304,104 +1293,16 @@ namespace saba
 	}
 
 	PMXNode::PMXNode()
-		: m_deformDepth(-1), m_isDeformAfterPhysics(false), m_appendNode(nullptr), m_isAppendRotate(false), m_isAppendTranslate(false), m_isAppendLocal(false), m_appendWeight(0), m_ikSolver(nullptr)
+		: m_isDeformAfterPhysics(false)
 	{
-	}
-
-	void PMXNode::UpdateAppendTransform()
-	{
-		if (m_appendNode == nullptr)
-		{
-			return;
-		}
-
-		if (m_isAppendRotate)
-		{
-			glm::quat appendRotate;
-			if (m_isAppendLocal)
-			{
-				appendRotate = m_appendNode->AnimateRotate();
-			}
-			else
-			{
-				if (m_appendNode->GetAppendNode() != nullptr)
-				{
-					appendRotate = m_appendNode->GetAppendRotate();
-				}
-				else
-				{
-					appendRotate = m_appendNode->AnimateRotate();
-				}
-			}
-
-			if (m_appendNode->m_enableIK)
-			{
-				appendRotate = m_appendNode->GetIKRotate() * appendRotate;
-			}
-
-			glm::quat appendQ = glm::slerp(
-				glm::quat(1, 0, 0, 0),
-				appendRotate,
-				GetAppendWeight());
-			m_appendRotate = appendQ;
-		}
-
-		if (m_isAppendTranslate)
-		{
-			glm::vec3 appendTranslate(0.0f);
-			if (m_isAppendLocal)
-			{
-				appendTranslate = m_appendNode->GetTranslate() - m_appendNode->GetInitialTranslate();
-			}
-			else
-			{
-				if (m_appendNode->GetAppendNode() != nullptr)
-				{
-					appendTranslate = m_appendNode->GetAppendTranslate();
-				}
-				else
-				{
-					appendTranslate = m_appendNode->GetTranslate() - m_appendNode->GetInitialTranslate();
-				}
-			}
-
-			m_appendTranslate = appendTranslate * GetAppendWeight();
-		}
-
-		UpdateLocalTransform();
 	}
 
 	void PMXNode::OnBeginUpdateTransform()
 	{
-		m_appendTranslate = glm::vec3(0);
-		m_appendRotate = glm::quat(1, 0, 0, 0);
 	}
 
 	void PMXNode::OnEndUpdateTransfrom()
 	{
-	}
-
-	void PMXNode::OnUpdateLocalTransform()
-	{
-		glm::vec3 t = AnimateTranslate();
-		if (m_isAppendTranslate)
-		{
-			t += m_appendTranslate;
-		}
-
-		glm::quat r = AnimateRotate();
-		if (m_enableIK)
-		{
-			r = GetIKRotate() * r;
-		}
-		if (m_isAppendRotate)
-		{
-			r = r * m_appendRotate;
-		}
-
-		glm::vec3 s = GetScale();
-
-		m_local = glm::translate(glm::mat4(1), t) * glm::mat4_cast(r) * glm::scale(glm::mat4(1), s);
 	}
 
 	PMXModel::MaterialFactor::MaterialFactor(const saba::PMXMorph::MaterialMorph &pmxMat)
@@ -1446,5 +1347,456 @@ namespace saba
 		m_textureFactor += val.m_textureFactor * weight;
 		m_spTextureFactor += val.m_spTextureFactor * weight;
 		m_toonTextureFactor += val.m_toonTextureFactor * weight;
+	}
+}
+
+static inline void internal_import_animation_skeleton(mcrt_vector<mmd_pmx_bone_t> const &in_mmd_model_nodes, mcrt_vector<uint32_t> &out_animation_skeleton_joint_parent_indices, mcrt_vector<uint32_t> &out_model_node_to_animation_skeleton_joint_map, mcrt_vector<uint32_t> &out_animation_skeleton_joint_to_model_node_map, mcrt_vector<DirectX::XMFLOAT4X4> &out_animation_skeleton_bind_pose_local_space, mcrt_vector<DirectX::XMFLOAT4X4> &out_animation_skeleton_bind_pose_model_space, mcrt_vector<brx_motion_joint_constraint> &out_animation_skeleton_joint_constraints, mcrt_vector<mcrt_vector<uint32_t>> &out_animation_skeleton_joint_constraints_storage)
+{
+	uint32_t const model_node_count = in_mmd_model_nodes.size();
+
+	assert(out_animation_skeleton_joint_parent_indices.empty());
+	out_animation_skeleton_joint_parent_indices = {};
+	assert(out_model_node_to_animation_skeleton_joint_map.empty());
+	out_model_node_to_animation_skeleton_joint_map = mcrt_vector<uint32_t>(static_cast<size_t>(model_node_count), BRX_MOTION_UINT32_INDEX_INVALID);
+	assert(out_animation_skeleton_joint_to_model_node_map.empty());
+	out_animation_skeleton_joint_to_model_node_map = mcrt_vector<uint32_t>(static_cast<size_t>(model_node_count), BRX_MOTION_UINT32_INDEX_INVALID);
+	{
+		mcrt_vector<uint32_t> model_node_parent_indices(static_cast<size_t>(model_node_count));
+		{
+			for (size_t model_node_index = 0; model_node_index < model_node_count; ++model_node_index)
+			{
+				model_node_parent_indices[model_node_index] = in_mmd_model_nodes[model_node_index].m_parent_index;
+			}
+		}
+
+		mcrt_vector<uint32_t> model_node_depth_first_search_stack;
+		mcrt_vector<mcrt_vector<uint32_t>> model_node_children_indices(static_cast<size_t>(model_node_count));
+		for (uint32_t model_node_index_plus_1 = model_node_count; model_node_index_plus_1 > 0U; --model_node_index_plus_1)
+		{
+			uint32_t const model_node_index = model_node_index_plus_1 - 1U;
+			uint32_t model_node_parent_index = model_node_parent_indices[model_node_index];
+			if (BRX_MOTION_UINT32_INDEX_INVALID != model_node_parent_index)
+			{
+				model_node_children_indices[model_node_parent_index].push_back(model_node_index);
+			}
+			else
+			{
+				model_node_depth_first_search_stack.push_back(model_node_index);
+			}
+		}
+		assert(!model_node_depth_first_search_stack.empty());
+
+		mcrt_vector<bool> model_node_visited_flags(static_cast<size_t>(model_node_count), false);
+		mcrt_vector<bool> model_node_pushed_flags(static_cast<size_t>(model_node_count), false);
+		while (!model_node_depth_first_search_stack.empty())
+		{
+			uint32_t const model_node_current_index = model_node_depth_first_search_stack.back();
+			model_node_depth_first_search_stack.pop_back();
+
+			assert(!model_node_visited_flags[model_node_current_index]);
+			model_node_visited_flags[model_node_current_index] = true;
+
+			uint32_t const animation_skeleton_joint_current_index = out_animation_skeleton_joint_parent_indices.size();
+
+			uint32_t const model_node_parent_index = model_node_parent_indices[model_node_current_index];
+
+			if (BRX_MOTION_UINT32_INDEX_INVALID == model_node_parent_index)
+			{
+				out_animation_skeleton_joint_parent_indices.push_back(BRX_MOTION_UINT32_INDEX_INVALID);
+			}
+			else
+			{
+				assert(BRX_MOTION_UINT32_INDEX_INVALID != out_model_node_to_animation_skeleton_joint_map[model_node_parent_index]);
+				out_animation_skeleton_joint_parent_indices.push_back(out_model_node_to_animation_skeleton_joint_map[model_node_parent_index]);
+			}
+
+			assert(BRX_MOTION_UINT32_INDEX_INVALID == out_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_current_index]);
+			out_animation_skeleton_joint_to_model_node_map[animation_skeleton_joint_current_index] = model_node_current_index;
+
+			assert(BRX_MOTION_UINT32_INDEX_INVALID == out_model_node_to_animation_skeleton_joint_map[model_node_current_index]);
+			out_model_node_to_animation_skeleton_joint_map[model_node_current_index] = animation_skeleton_joint_current_index;
+
+			for (uint32_t model_node_child_index_index_plus_1 = static_cast<uint32_t>(model_node_children_indices[model_node_current_index].size()); model_node_child_index_index_plus_1 > 0U; --model_node_child_index_index_plus_1)
+			{
+				uint32_t const model_node_child_index = model_node_children_indices[model_node_current_index][model_node_child_index_index_plus_1 - 1U];
+
+				if ((!model_node_visited_flags[model_node_child_index]) && (!model_node_pushed_flags[model_node_child_index]))
+				{
+					model_node_pushed_flags[model_node_child_index] = true;
+					model_node_depth_first_search_stack.push_back(model_node_child_index);
+				}
+				else
+				{
+					assert(false);
+				}
+			}
+		}
+
+		assert(out_animation_skeleton_joint_parent_indices.size() == model_node_count);
+	}
+
+	assert(out_animation_skeleton_bind_pose_local_space.empty());
+	out_animation_skeleton_bind_pose_local_space = mcrt_vector<DirectX::XMFLOAT4X4>(static_cast<size_t>(model_node_count));
+	assert(out_animation_skeleton_bind_pose_model_space.empty());
+	out_animation_skeleton_bind_pose_model_space = mcrt_vector<DirectX::XMFLOAT4X4>(static_cast<size_t>(model_node_count));
+	for (size_t current_animation_skeleton_joint_index = 0; current_animation_skeleton_joint_index < model_node_count; ++current_animation_skeleton_joint_index)
+	{
+		{
+			uint32_t const current_model_node_index = out_animation_skeleton_joint_to_model_node_map[current_animation_skeleton_joint_index];
+
+			// TODO: remove this
+			DirectX::XMFLOAT3 node_translation_model_space;
+			{
+				glm::vec3 temp = saba::InvZ(glm::vec3(in_mmd_model_nodes[current_model_node_index].m_translation.m_x, in_mmd_model_nodes[current_model_node_index].m_translation.m_y, in_mmd_model_nodes[current_model_node_index].m_translation.m_z));
+				node_translation_model_space.x = temp.x;
+				node_translation_model_space.y = temp.y;
+				node_translation_model_space.z = temp.z;
+			}
+
+			DirectX::XMStoreFloat4x4(&out_animation_skeleton_bind_pose_model_space[current_animation_skeleton_joint_index], DirectX::XMMatrixTranslationFromVector(DirectX::XMLoadFloat3(&node_translation_model_space)));
+		}
+
+		uint32_t const parent_animation_skeleton_joint_index = out_animation_skeleton_joint_parent_indices[current_animation_skeleton_joint_index];
+		if (BRX_MOTION_UINT32_INDEX_INVALID != parent_animation_skeleton_joint_index)
+		{
+			assert(parent_animation_skeleton_joint_index < current_animation_skeleton_joint_index);
+
+			DirectX::XMVECTOR unused_determinant;
+			DirectX::XMStoreFloat4x4(&out_animation_skeleton_bind_pose_local_space[current_animation_skeleton_joint_index], DirectX::XMMatrixMultiply(DirectX::XMLoadFloat4x4(&out_animation_skeleton_bind_pose_model_space[current_animation_skeleton_joint_index]), DirectX::XMMatrixInverse(&unused_determinant, DirectX::XMLoadFloat4x4(&out_animation_skeleton_bind_pose_model_space[parent_animation_skeleton_joint_index]))));
+		}
+		else
+		{
+			out_animation_skeleton_bind_pose_local_space[current_animation_skeleton_joint_index] = out_animation_skeleton_bind_pose_model_space[current_animation_skeleton_joint_index];
+		}
+	}
+
+	assert(out_animation_skeleton_joint_constraints.empty());
+	out_animation_skeleton_joint_constraints = {};
+	assert(out_animation_skeleton_joint_constraints_storage.empty());
+	out_animation_skeleton_joint_constraints_storage = {};
+	{
+		mcrt_vector<uint32_t> sorted_model_node_indices(static_cast<size_t>(model_node_count));
+		for (uint32_t model_node_index = 0U; model_node_index < model_node_count; ++model_node_index)
+		{
+			sorted_model_node_indices[model_node_index] = model_node_index;
+		}
+
+		std::stable_sort(sorted_model_node_indices.begin(), sorted_model_node_indices.end(),
+						 [&in_mmd_model_nodes](uint32_t x, uint32_t y)
+						 {
+							 if ((in_mmd_model_nodes[x].m_meta_physics && in_mmd_model_nodes[y].m_meta_physics) || ((!in_mmd_model_nodes[x].m_meta_physics) && (!in_mmd_model_nodes[y].m_meta_physics)))
+							 {
+								 return in_mmd_model_nodes[x].m_transformation_hierarchy < in_mmd_model_nodes[y].m_transformation_hierarchy;
+							 }
+							 else if ((!in_mmd_model_nodes[x].m_meta_physics) && in_mmd_model_nodes[y].m_meta_physics)
+							 {
+								 return true;
+							 }
+							 else
+							 {
+								 assert(in_mmd_model_nodes[x].m_meta_physics && (!in_mmd_model_nodes[y].m_meta_physics));
+								 return false;
+							 }
+						 });
+
+		for (uint32_t sorted_model_node_index = 0U; sorted_model_node_index < model_node_count; ++sorted_model_node_index)
+		{
+			uint32_t const model_node_index = sorted_model_node_indices[sorted_model_node_index];
+
+			if (in_mmd_model_nodes[model_node_index].m_append_rotation || in_mmd_model_nodes[model_node_index].m_append_translation)
+			{
+				brx_motion_joint_constraint animation_skeleton_joint_copy_transform_constraint;
+				animation_skeleton_joint_copy_transform_constraint.m_constraint_type = BRX_JOINT_CONSTRAINT_COPY_TRANSFORM;
+				animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_copy_rotation = in_mmd_model_nodes[model_node_index].m_append_rotation;
+				animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_copy_translation = in_mmd_model_nodes[model_node_index].m_append_translation;
+				animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_destination_joint_index = out_model_node_to_animation_skeleton_joint_map[model_node_index];
+
+				if (!in_mmd_model_nodes[model_node_index].m_append_local)
+				{
+					mcrt_vector<uint32_t> ancestors;
+					ancestors.push_back(model_node_index);
+					for (uint32_t current_model_node_index = ((in_mmd_model_nodes[model_node_index].m_append_rotation || in_mmd_model_nodes[model_node_index].m_append_translation) ? in_mmd_model_nodes[model_node_index].m_append_parent_index : BRX_MOTION_UINT32_INDEX_INVALID); BRX_MOTION_UINT32_INDEX_INVALID != current_model_node_index; current_model_node_index = ((in_mmd_model_nodes[current_model_node_index].m_append_rotation || in_mmd_model_nodes[current_model_node_index].m_append_translation) ? in_mmd_model_nodes[current_model_node_index].m_append_parent_index : BRX_MOTION_UINT32_INDEX_INVALID))
+					{
+						ancestors.push_back(current_model_node_index);
+					}
+					assert(!ancestors.empty());
+
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_joint_index = out_model_node_to_animation_skeleton_joint_map[ancestors.back()];
+
+					ancestors.pop_back();
+
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weight_count = ancestors.size();
+
+					out_animation_skeleton_joint_constraints_storage.emplace_back();
+					out_animation_skeleton_joint_constraints_storage.back().resize(animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weight_count);
+					static_assert(sizeof(float) == sizeof(uint32_t), "");
+					static_assert(alignof(float) == alignof(uint32_t), "");
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weights = reinterpret_cast<float *>(out_animation_skeleton_joint_constraints_storage.back().data());
+
+					for (uint32_t source_weight_index = 0U; !ancestors.empty(); ++source_weight_index)
+					{
+						animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weights[source_weight_index] = in_mmd_model_nodes[ancestors.back()].m_append_rate;
+						ancestors.pop_back();
+					}
+				}
+				else
+				{
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_joint_index = out_model_node_to_animation_skeleton_joint_map[in_mmd_model_nodes[model_node_index].m_append_parent_index];
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weight_count = 1U;
+
+					out_animation_skeleton_joint_constraints_storage.emplace_back();
+					out_animation_skeleton_joint_constraints_storage.back().resize(animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weight_count);
+					static_assert(sizeof(float) == sizeof(uint32_t), "");
+					static_assert(alignof(float) == alignof(uint32_t), "");
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weights = reinterpret_cast<float *>(out_animation_skeleton_joint_constraints_storage.back().data());
+
+					animation_skeleton_joint_copy_transform_constraint.m_copy_transform.m_source_weights[0] = in_mmd_model_nodes[model_node_index].m_append_rate;
+				}
+
+				out_animation_skeleton_joint_constraints.push_back(animation_skeleton_joint_copy_transform_constraint);
+			}
+
+			if (in_mmd_model_nodes[model_node_index].m_ik)
+			{
+				brx_motion_joint_constraint animation_skeleton_joint_inverse_kinematics_constraint;
+
+				animation_skeleton_joint_inverse_kinematics_constraint.m_constraint_type = BRX_JOINT_CONSTRAINT_INVERSE_KINEMATICS;
+				animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_target_joint_index = out_model_node_to_animation_skeleton_joint_map[model_node_index];
+				animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_end_effector_index = out_model_node_to_animation_skeleton_joint_map[in_mmd_model_nodes[model_node_index].m_ik_end_effector_index];
+				animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_count = in_mmd_model_nodes[model_node_index].m_ik_link_indices.size();
+
+				out_animation_skeleton_joint_constraints_storage.emplace_back();
+				out_animation_skeleton_joint_constraints_storage.back().resize(animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_count);
+				animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_indices = out_animation_skeleton_joint_constraints_storage.back().data();
+
+				for (uint32_t ik_joint_index = 0U; ik_joint_index < animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_count; ++ik_joint_index)
+				{
+					animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_indices[ik_joint_index] = out_model_node_to_animation_skeleton_joint_map[in_mmd_model_nodes[model_node_index].m_ik_link_indices[ik_joint_index]];
+				}
+
+				if (2U == animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_count)
+				{
+					DirectX::XMFLOAT3 hinge_joint_normal_local_space;
+					{
+						DirectX::XMFLOAT4X4 const end_effector_transform_local_space = out_animation_skeleton_bind_pose_local_space[animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_end_effector_index];
+
+						constexpr uint32_t const ball_and_socket_ik_joint_index = 0U;
+						constexpr uint32_t const hinge_ik_joint_index = 1U;
+
+						uint32_t const ball_and_socket_animation_skeleton_joint_index = animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_indices[ball_and_socket_ik_joint_index];
+						uint32_t const hinge_animation_skeleton_joint_index = animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_joint_indices[hinge_ik_joint_index];
+
+						DirectX::XMFLOAT4X4 const ball_and_socket_joint_transform_model_space = out_animation_skeleton_bind_pose_model_space[ball_and_socket_animation_skeleton_joint_index];
+
+						DirectX::XMFLOAT4X4 const hinge_joint_transform_model_space = out_animation_skeleton_bind_pose_model_space[hinge_animation_skeleton_joint_index];
+
+						constexpr float const INTERNAL_SCALE_EPSILON = 9E-5F;
+
+						DirectX::XMVECTOR ball_and_socket_joint_hinge_joint_local_space_translation;
+						{
+
+							DirectX::XMVECTOR unused_determinant;
+							DirectX::XMMATRIX ball_and_socket_joint_hinge_joint_local_space_transform = DirectX::XMMatrixMultiply(DirectX::XMLoadFloat4x4(&ball_and_socket_joint_transform_model_space), DirectX::XMMatrixInverse(&unused_determinant, DirectX::XMLoadFloat4x4(&hinge_joint_transform_model_space)));
+
+							DirectX::XMVECTOR ball_and_socket_joint_hinge_joint_local_space_scale;
+							DirectX::XMVECTOR ball_and_socket_joint_hinge_joint_local_space_rotation;
+							bool directx_xm_matrix_decompose = DirectX::XMMatrixDecompose(&ball_and_socket_joint_hinge_joint_local_space_scale, &ball_and_socket_joint_hinge_joint_local_space_rotation, &ball_and_socket_joint_hinge_joint_local_space_translation, ball_and_socket_joint_hinge_joint_local_space_transform);
+							assert(directx_xm_matrix_decompose);
+
+							assert(DirectX::XMVector3EqualInt(DirectX::XMVectorTrueInt(), DirectX::XMVectorLess(DirectX::XMVectorAbs(DirectX::XMVectorSubtract(ball_and_socket_joint_hinge_joint_local_space_scale, DirectX::XMVectorSplatOne())), DirectX::XMVectorReplicate(INTERNAL_SCALE_EPSILON))));
+						}
+
+						DirectX::XMVECTOR end_effector_hinge_joint_local_space_translation;
+						{
+							DirectX::XMVECTOR end_effector_hinge_joint_local_space_scale;
+							DirectX::XMVECTOR end_effector_hinge_joint_local_space_rotation;
+							bool directx_xm_matrix_decompose = DirectX::XMMatrixDecompose(&end_effector_hinge_joint_local_space_scale, &end_effector_hinge_joint_local_space_rotation, &end_effector_hinge_joint_local_space_translation, DirectX::XMLoadFloat4x4(&end_effector_transform_local_space));
+							assert(directx_xm_matrix_decompose);
+
+							assert(DirectX::XMVector3EqualInt(DirectX::XMVectorTrueInt(), DirectX::XMVectorLess(DirectX::XMVectorAbs(DirectX::XMVectorSubtract(end_effector_hinge_joint_local_space_scale, DirectX::XMVectorSplatOne())), DirectX::XMVectorReplicate(INTERNAL_SCALE_EPSILON))));
+						}
+
+						DirectX::XMStoreFloat3(&hinge_joint_normal_local_space, DirectX::XMVector3Normalize(DirectX::XMVector3Cross(ball_and_socket_joint_hinge_joint_local_space_translation, end_effector_hinge_joint_local_space_translation)));
+					}
+
+					DirectX::XMFLOAT3 hinge_joint_axis_local_space;
+					float cosine_max_hinge_joint_angle;
+					float cosine_min_hinge_joint_angle;
+					if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle)
+					{
+						float rotation_limit_x = std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x));
+						float rotation_limit_y = std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y));
+						float rotation_limit_z = std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z));
+
+						if ((rotation_limit_x >= rotation_limit_y) && (rotation_limit_x >= rotation_limit_z))
+						{
+							if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x >= 0.0F && in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x >= 0.0F)
+							{
+								hinge_joint_axis_local_space.x = 1.0F;
+								hinge_joint_axis_local_space.y = 0.0F;
+								hinge_joint_axis_local_space.z = 0.0F;
+
+								cosine_max_hinge_joint_angle = std::cos(std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x)));
+								cosine_min_hinge_joint_angle = std::cos(std::min(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x)));
+							}
+							else if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x <= 0.0F && in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x <= 0.0F)
+							{
+								hinge_joint_axis_local_space.x = -1.0F;
+								hinge_joint_axis_local_space.y = 0.0F;
+								hinge_joint_axis_local_space.z = 0.0F;
+
+								cosine_max_hinge_joint_angle = std::cos(std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x)));
+								cosine_min_hinge_joint_angle = std::cos(std::min(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x)));
+							}
+							else
+							{
+								float rotation_limit_min = std::min(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x, in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x);
+								float rotation_limit_max = std::max(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_x, in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_x);
+								assert(rotation_limit_min <= 0.0F);
+								assert(rotation_limit_max >= 0.0F);
+
+								if (std::abs(rotation_limit_max) >= std::abs(rotation_limit_min))
+								{
+									hinge_joint_axis_local_space.x = 1.0F;
+									hinge_joint_axis_local_space.y = 0.0F;
+									hinge_joint_axis_local_space.z = 0.0F;
+
+									cosine_max_hinge_joint_angle = std::cos(std::abs(rotation_limit_max));
+									cosine_min_hinge_joint_angle = 1.0F;
+								}
+								else
+								{
+									hinge_joint_axis_local_space.x = -1.0F;
+									hinge_joint_axis_local_space.y = 0.0F;
+									hinge_joint_axis_local_space.z = 0.0F;
+
+									cosine_max_hinge_joint_angle = std::cos(std::abs(rotation_limit_min));
+									cosine_min_hinge_joint_angle = 1.0F;
+								}
+							}
+						}
+						else if ((rotation_limit_y >= rotation_limit_z) && (rotation_limit_y >= rotation_limit_x))
+						{
+							if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y >= 0.0F && in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y >= 0.0F)
+							{
+								hinge_joint_axis_local_space.x = 0.0F;
+								hinge_joint_axis_local_space.y = 1.0F;
+								hinge_joint_axis_local_space.z = 0.0F;
+
+								cosine_max_hinge_joint_angle = std::cos(std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y)));
+								cosine_min_hinge_joint_angle = std::cos(std::min(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y)));
+							}
+							else if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y <= 0.0F && in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y <= 0.0F)
+							{
+								hinge_joint_axis_local_space.x = 0.0F;
+								hinge_joint_axis_local_space.y = -1.0F;
+								hinge_joint_axis_local_space.z = 0.0F;
+
+								cosine_max_hinge_joint_angle = std::cos(std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y)));
+								cosine_min_hinge_joint_angle = std::cos(std::min(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y)));
+							}
+							else
+							{
+								float rotation_limit_min = std::min(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y, in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y);
+								float rotation_limit_max = std::max(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_y, in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_y);
+								assert(rotation_limit_min <= 0.0F);
+								assert(rotation_limit_max >= 0.0F);
+
+								if (std::abs(rotation_limit_max) >= std::abs(rotation_limit_min))
+								{
+									hinge_joint_axis_local_space.x = 0.0F;
+									hinge_joint_axis_local_space.y = 1.0F;
+									hinge_joint_axis_local_space.z = 0.0F;
+
+									cosine_max_hinge_joint_angle = std::cos(std::abs(rotation_limit_max));
+									cosine_min_hinge_joint_angle = 1.0F;
+								}
+								else
+								{
+									hinge_joint_axis_local_space.x = 0.0F;
+									hinge_joint_axis_local_space.y = -1.0F;
+									hinge_joint_axis_local_space.z = 0.0F;
+
+									cosine_max_hinge_joint_angle = std::cos(std::abs(rotation_limit_min));
+									cosine_min_hinge_joint_angle = 1.0F;
+								}
+							}
+						}
+						else
+						{
+							assert((rotation_limit_z >= rotation_limit_x) && (rotation_limit_z >= rotation_limit_y));
+
+							if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z >= 0.0F && in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z >= 0.0F)
+							{
+								hinge_joint_axis_local_space.x = 0.0F;
+								hinge_joint_axis_local_space.y = 0.0F;
+								hinge_joint_axis_local_space.z = 1.0F;
+
+								cosine_max_hinge_joint_angle = std::cos(std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z)));
+								cosine_min_hinge_joint_angle = std::cos(std::min(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z)));
+							}
+							else if (in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z <= 0.0F && in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z <= 0.0F)
+							{
+								hinge_joint_axis_local_space.x = 0.0F;
+								hinge_joint_axis_local_space.y = 0.0F;
+								hinge_joint_axis_local_space.z = -1.0F;
+
+								cosine_max_hinge_joint_angle = std::cos(std::max(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z)));
+								cosine_min_hinge_joint_angle = std::cos(std::min(std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z), std::abs(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z)));
+							}
+							else
+							{
+								float rotation_limit_min = std::min(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z, in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z);
+								float rotation_limit_max = std::max(in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_min.m_z, in_mmd_model_nodes[model_node_index].m_ik_two_links_hinge_limit_angle_max.m_z);
+								assert(rotation_limit_min <= 0.0F);
+								assert(rotation_limit_max >= 0.0F);
+
+								if (std::abs(rotation_limit_max) >= std::abs(rotation_limit_min))
+								{
+									hinge_joint_axis_local_space.x = 0.0F;
+									hinge_joint_axis_local_space.y = 0.0F;
+									hinge_joint_axis_local_space.z = 1.0F;
+
+									cosine_max_hinge_joint_angle = std::cos(std::abs(rotation_limit_max));
+									cosine_min_hinge_joint_angle = 1.0F;
+								}
+								else
+								{
+									hinge_joint_axis_local_space.x = 0.0F;
+									hinge_joint_axis_local_space.y = 0.0F;
+									hinge_joint_axis_local_space.z = -1.0F;
+
+									cosine_max_hinge_joint_angle = std::cos(std::abs(rotation_limit_min));
+									cosine_min_hinge_joint_angle = 1.0F;
+								}
+							}
+						}
+
+						if (DirectX::XMVectorGetX(DirectX::XMVector3Dot(DirectX::XMLoadFloat3(&hinge_joint_axis_local_space), DirectX::XMLoadFloat3(&hinge_joint_normal_local_space))) < (1.0F - 5E-2F))
+						{
+							assert(false);
+							hinge_joint_axis_local_space = hinge_joint_normal_local_space;
+							cosine_max_hinge_joint_angle = -1.0F;
+							cosine_min_hinge_joint_angle = 1.0F;
+						}
+					}
+					else
+					{
+						hinge_joint_axis_local_space = hinge_joint_normal_local_space;
+						cosine_max_hinge_joint_angle = -1.0F;
+						cosine_min_hinge_joint_angle = 1.0F;
+					}
+
+					animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[0] = hinge_joint_axis_local_space.x;
+					animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[1] = hinge_joint_axis_local_space.y;
+					animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[2] = hinge_joint_axis_local_space.z;
+					animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_cosine_max_ik_two_joints_hinge_joint_angle = cosine_max_hinge_joint_angle;
+
+					animation_skeleton_joint_inverse_kinematics_constraint.m_inverse_kinematics.m_cosine_min_ik_two_joints_hinge_joint_angle = cosine_min_hinge_joint_angle;
+				}
+
+				out_animation_skeleton_joint_constraints.push_back(animation_skeleton_joint_inverse_kinematics_constraint);
+			}
+		}
 	}
 }

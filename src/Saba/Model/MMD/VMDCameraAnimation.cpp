@@ -12,13 +12,17 @@ namespace saba
 {
 	namespace
 	{
-		void SetVMDBezier(VMDBezier& bezier, int x0, int x1, int y0, int y1)
+		void SetVMDBezier(VMDBezier &bezier, int x0, int x1, int y0, int y1)
 		{
 			bezier.m_cp1 = glm::vec2((float)x0 / 127.0f, (float)y0 / 127.0f);
 			bezier.m_cp2 = glm::vec2((float)x1 / 127.0f, (float)y1 / 127.0f);
 		}
-	} // namespace
 
+		glm::vec3 InvZ(const glm::vec3 &v)
+		{
+			return v * glm::vec3(1, 1, -1);
+		}
+	} // namespace
 
 	VMDCameraController::VMDCameraController()
 		: m_startKeyIndex(0)
@@ -35,7 +39,7 @@ namespace saba
 		auto boundIt = FindBoundKey(m_keys, int32_t(t), m_startKeyIndex);
 		if (boundIt == std::end(m_keys))
 		{
-			const auto& selectKey = m_keys[m_keys.size() - 1];
+			const auto &selectKey = m_keys[m_keys.size() - 1];
 			m_camera.m_interest = selectKey.m_interest;
 			m_camera.m_rotate = selectKey.m_rotate;
 			m_camera.m_distance = selectKey.m_distance;
@@ -43,15 +47,15 @@ namespace saba
 		}
 		else
 		{
-			const auto& selectKey = (*boundIt);
+			const auto &selectKey = (*boundIt);
 			m_camera.m_interest = selectKey.m_interest;
 			m_camera.m_rotate = selectKey.m_rotate;
 			m_camera.m_distance = selectKey.m_distance;
 			m_camera.m_fov = selectKey.m_fov;
 			if (boundIt != std::begin(m_keys))
 			{
-				const auto& key0 = *(boundIt - 1);
-				const auto& key1 = *boundIt;
+				const auto &key0 = *(boundIt - 1);
+				const auto &key1 = *boundIt;
 
 				if ((key1.m_time - key0.m_time) > 1)
 				{
@@ -91,7 +95,6 @@ namespace saba
 				m_startKeyIndex = std::distance(m_keys.cbegin(), boundIt);
 			}
 		}
-
 	}
 
 	void VMDCameraController::SortKeys()
@@ -99,8 +102,8 @@ namespace saba
 		std::sort(
 			std::begin(m_keys),
 			std::end(m_keys),
-			[](const KeyType& a, const KeyType& b) { return a.m_time < b.m_time; }
-		);
+			[](const KeyType &a, const KeyType &b)
+			{ return a.m_time < b.m_time; });
 	}
 
 	VMDCameraAnimation::VMDCameraAnimation()
@@ -108,21 +111,21 @@ namespace saba
 		Destroy();
 	}
 
-	bool VMDCameraAnimation::Create(const VMDFile & vmd)
+	bool VMDCameraAnimation::Create(const VMDFile &vmd)
 	{
 		if (!vmd.m_cameras.empty())
 		{
 			m_cameraController = std::make_unique<VMDCameraController>();
-			for (const auto& cam : vmd.m_cameras)
+			for (const auto &cam : vmd.m_cameras)
 			{
 				VMDCameraAnimationKey key;
 				key.m_time = int32_t(cam.m_frame);
-				key.m_interest = cam.m_interest * glm::vec3(1, 1, -1);
+				key.m_interest = InvZ(cam.m_interest);
 				key.m_rotate = cam.m_rotate;
 				key.m_distance = cam.m_distance;
 				key.m_fov = glm::radians((float)cam.m_viewAngle);
 
-				const uint8_t* ip = cam.m_interpolation.data();
+				const uint8_t *ip = cam.m_interpolation.data();
 				SetVMDBezier(key.m_ixBezier, ip[0], ip[1], ip[2], ip[3]);
 				SetVMDBezier(key.m_iyBezier, ip[4], ip[5], ip[6], ip[7]);
 				SetVMDBezier(key.m_izBezier, ip[8], ip[9], ip[10], ip[11]);
@@ -152,6 +155,4 @@ namespace saba
 		m_camera = m_cameraController->GetCamera();
 	}
 
-
 }
-

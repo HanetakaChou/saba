@@ -1449,13 +1449,7 @@ bool App::Run(const std::vector<std::string>& args)
 		auto ext = saba::PathUtil::GetExt(input.m_modelPath);
 		if (ext == "pmd")
 		{
-			auto pmdModel = std::make_unique<saba::PMDModel>();
-			if (!pmdModel->Load(input.m_modelPath, m_appContext.m_mmdDir))
-			{
-				std::cout << "Failed to load pmd file.\n";
-				return false;
-			}
-			model.m_mmdModel = std::move(pmdModel);
+			assert(false);
 		}
 		else if (ext == "pmx")
 		{

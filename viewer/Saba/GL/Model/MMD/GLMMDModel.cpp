@@ -194,7 +194,7 @@ namespace saba
 		}
 
 		// Physicsを同期する
-		m_vmdAnim->SyncPhysics(float(m_animTime * 30.0), 30);
+		m_vmdAnim->SyncPhysics(float(m_animTime * 30), 30);
 
 		return true;
 	}
@@ -292,21 +292,9 @@ namespace saba
 
 		// Update node animation (before physics animation)
 		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(false);
-		updateNodeAnimPerf.Stop();
-		;
-
-		if (m_enablePhysics)
-		{
-			// Update physics animation
-			updatePhysicsAnimPerf.Start();
-			m_mmdModel->UpdatePhysicsAnimation((float)elapsed);
-			updatePhysicsAnimPerf.Stop();
-		}
-
-		// Update node animation (after physics animation)
-		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(true);
+		updatePhysicsAnimPerf.Start();
+		m_mmdModel->UpdateNodeAnimation(m_enablePhysics, (float)elapsed);
+		updatePhysicsAnimPerf.Stop();
 		updateNodeAnimPerf.Stop();
 
 		// End animation
@@ -349,20 +337,9 @@ namespace saba
 
 		// Update node animation (before physics animation)
 		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(false);
-		updateNodeAnimPerf.Stop();
-
-		if (m_enablePhysics)
-		{
-			// Update physics animation
-			updatePhysicsAnimPerf.Start();
-			m_mmdModel->UpdatePhysicsAnimation((float)elapsed);
-			updatePhysicsAnimPerf.Stop();
-		}
-
-		// Update node animation (after physics animation)
-		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(true);
+		updatePhysicsAnimPerf.Start();
+		m_mmdModel->UpdateNodeAnimation(true, (float)elapsed);
+		updatePhysicsAnimPerf.Stop();
 		updateNodeAnimPerf.Stop();
 
 		// End animation
@@ -385,9 +362,7 @@ namespace saba
 		m_mmdModel->LoadBaseAnimation();
 
 		m_mmdModel->UpdateMorphAnimation();
-		m_mmdModel->UpdateNodeAnimation(false);
-		m_mmdModel->UpdatePhysicsAnimation(0.0f);
-		m_mmdModel->UpdateNodeAnimation(true);
+		m_mmdModel->UpdateNodeAnimation(true, 0.0f);
 
 		m_mmdModel->EndAnimation();
 	}

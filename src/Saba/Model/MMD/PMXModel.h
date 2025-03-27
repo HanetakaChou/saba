@@ -26,48 +26,15 @@ namespace saba
 	public:
 		PMXNode();
 
-		void SetDeformDepth(int32_t depth) { m_deformDepth = depth; }
-		int32_t GetDeformdepth() const { return m_deformDepth; }
-
 		void EnableDeformAfterPhysics(bool enable) { m_isDeformAfterPhysics = enable; }
-		bool IsDeformAfterPhysics() { return m_isDeformAfterPhysics; }
-
-		void SetAppendNode(PMXNode *node) { m_appendNode = node; }
-		PMXNode *GetAppendNode() const { return m_appendNode; }
-
-		void EnableAppendRotate(bool enable) { m_isAppendRotate = enable; }
-		void EnableAppendTranslate(bool enable) { m_isAppendTranslate = enable; }
-		void EnableAppendLocal(bool enable) { m_isAppendLocal = enable; }
-		void SetAppendWeight(float weight) { m_appendWeight = weight; }
-		float GetAppendWeight() const { return m_appendWeight; }
-
-		const glm::vec3 &GetAppendTranslate() const { return m_appendTranslate; }
-		const glm::quat &GetAppendRotate() const { return m_appendRotate; }
-
-		void SetIKSolver(MMDIkSolver *ik) { m_ikSolver = ik; }
-		MMDIkSolver *GetIKSolver() const { return m_ikSolver; }
-
-		void UpdateAppendTransform();
+		bool IsDeformAfterPhysics() const { return m_isDeformAfterPhysics; }
 
 	protected:
 		void OnBeginUpdateTransform() override;
 		void OnEndUpdateTransfrom() override;
-		void OnUpdateLocalTransform() override;
 
 	private:
-		int32_t m_deformDepth;
 		bool m_isDeformAfterPhysics;
-
-		PMXNode *m_appendNode;
-		bool m_isAppendRotate;
-		bool m_isAppendTranslate;
-		bool m_isAppendLocal;
-		float m_appendWeight;
-
-		glm::vec3 m_appendTranslate;
-		glm::quat m_appendRotate;
-
-		MMDIkSolver *m_ikSolver;
 	};
 
 	class PMXModel : public MMDModel
@@ -108,10 +75,9 @@ namespace saba
 		// Morph
 		void UpdateMorphAnimation() override;
 		// ノードを更新する
-		void UpdateNodeAnimation(bool afterPhysicsAnim) override;
+		void UpdateNodeAnimation(bool enablePhysics, float elapsed) override;
 		// Physicsを更新する
 		void ResetPhysics() override;
-		void UpdatePhysicsAnimation(float elapsed) override;
 		// 頂点データーを更新する
 		void Update() override;
 		void SetParallelUpdateHint(uint32_t parallelCount) override;
@@ -291,7 +257,12 @@ namespace saba
 
 		std::vector<MMDMaterial> m_materials;
 		std::vector<MMDSubMesh> m_subMeshes;
-		std::vector<PMXNode *> m_sortedNodes;
+
+		mcrt_vector<uint32_t> m_animation_skeleton_joint_parent_indices;
+		mcrt_vector<uint32_t> m_model_node_to_animation_skeleton_joint_map;
+		mcrt_vector<uint32_t> m_animation_skeleton_joint_to_model_node_map;
+		mcrt_vector<brx_motion_joint_constraint> m_animation_skeleton_joint_constraints;
+		mcrt_vector<mcrt_vector<uint32_t>> m_animation_skeleton_joint_constraints_storage;
 
 		MMDNodeManagerT<PMXNode> m_nodeMan;
 		MMDIKManagerT<MMDIkSolver> m_ikSolverMan;

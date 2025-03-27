@@ -28,6 +28,11 @@ namespace saba
 			bezier.m_cp2 = glm::vec2((float)x1 / 127.0f, (float)y1 / 127.0f);
 		}
 
+		glm::vec3 InvZ(const glm::vec3 &v)
+		{
+			return v * glm::vec3(1, 1, -1);
+		}
+
 		glm::mat3 InvZ(const glm::mat3 &m)
 		{
 			const glm::mat3 invZ = glm::scale(glm::mat4(1), glm::vec3(1, 1, -1));
@@ -49,7 +54,31 @@ namespace saba
 			1,
 		};
 
-		return t3 * x[3] + 3 * t2 * it * x[2] + 3 * t * it2 * x[1] + it3 * x[0];
+		float result1 = t3 * x[3] + 3 * t2 * it * x[2] + 3 * t * it2 * x[1] + it3 * x[0];
+
+		// https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function/cubic-bezier
+
+		float k_1 = m_cp1.x;
+		float k_2 = m_cp2.x;
+
+		float const a = k_1 * 3.0F - k_2 * 3.0F + 1.0F;
+		float const b = k_2 * 3.0F - k_1 * 6.0F;
+		float const c = k_1 * 3.0F;
+		float const d = 0.0F;
+
+		float result2 = a * t3 + b * t2 + c * t + d;
+
+		assert(std::abs(result1 - result2) < 1E-5F);
+
+		float const prime_t = t + (b / a) * (1.0F / 3.0F);
+
+		float const p = (c / a) + ((b / a) * (b / a) * (-1.0F / 3.0F));
+		float const q = ((b / a) * (b / a) * (b / a) * (2.0F / 27.0F)) + ((b / a) * (c / a) * (-1.0F / 3.0F)) + (d / a);
+
+		float const result3 = a * (prime_t * prime_t * prime_t + p * prime_t + q);
+		assert(std::abs(result1 - result3) < 2E-4F);
+
+		return result1;
 	}
 
 	float VMDBezier::EvalY(float t) const
@@ -69,13 +98,72 @@ namespace saba
 		return t3 * y[3] + 3 * t2 * it * y[2] + 3 * t * it2 * y[1] + it3 * y[0];
 	}
 
-	glm::vec2 VMDBezier::Eval(float t) const
-	{
-		return glm::vec2(EvalX(t), EvalY(t));
-	}
-
 	float VMDBezier::FindBezierX(float time) const
 	{
+		{
+			float const x = time;
+
+			float const k_1 = m_cp1.x;
+			float const k_2 = m_cp2.x;
+
+			// https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function/cubic-bezier
+			//
+			// 0 * (1 - t)^3 + 3 * k_1 * (1 - t)^2 * t + 3 * k_2 * (1 - t) * t^2 + 1 * t^3 - x = 0
+			//
+			// (3 * k_1 - 3 * k_2 + 1) * t^3 + (3 * k_2 - 6 * k_1) * t^2 + (3 * k_1) * t - x = 0
+
+			float const a = k_1 * 3.0F - k_2 * 3.0F + 1.0F;
+			float const b = k_2 * 3.0F - k_1 * 6.0F;
+			float const c = k_1 * 3.0F;
+			float const d = -x;
+
+			// solve cubic equation: a*x^3 + b*x^2 + c*x + d = 0
+
+			// [_FnBezier.__find_roots](https://github.com/MMD-Blender/blender_mmd_tools/blob/main/mmd_tools/core/vmd/importer.py#L198)
+
+			float const epsilon = 1E-6F;
+
+			float t;
+			if (std::abs(a) > epsilon)
+			{
+				// Cubic Equation
+
+				// https://en.wikipedia.org/wiki/Cubic_equation#Depressed_cubic
+				//
+				// x = t - ((b/a)*(1/3))
+				//
+				// t^3 + pt + q = 0
+
+				float const p = (c / a) + ((b / a) * (b / a) * (-1.0F / 3.0F));
+				float const q = ((b / a) * (b / a) * (b / a) * (2.0F / 27.0F)) + ((b / a) * (c / a) * (-1.0F / 3.0F)) + (d / a);
+			}
+			else if (std::abs(b) > epsilon)
+			{
+				// Quadratic Equation
+
+				float const delta = c * c - b * d * 4.0F;
+				assert(delta > epsilon);
+
+				float const sqrt_delta = std::sqrt(std::max(epsilon, delta));
+				float t1 = ((0.0F - c) + sqrt_delta) / (b * 2.0F);
+				float t2 = ((0.0F - c) - sqrt_delta) / (b * 2.0F);
+
+				// choose one root
+				assert(false);
+			}
+			else
+			{
+				assert(std::abs(c) > epsilon);
+
+				// Linear Equation
+
+				float t1 = (0.0F - d) / std::max(epsilon, c);
+				assert(t1 >= 0.0F);
+				assert(t1 <= 1.0F);
+				t = t1;
+			}
+		}
+
 		const float e = 0.00001f;
 		float start = 0.0f;
 		float stop = 1.0f;
@@ -378,22 +466,16 @@ namespace saba
 		m_model->SaveBaseAnimation();
 
 		// Physicsを反映する
-		for (int i = 0; i < frameCount; i++)
-		{
-			m_model->BeginAnimation();
+		m_model->BeginAnimation();
 
-			Evaluate((float)t, float(1 + i) / float(frameCount));
+		Evaluate((float)t);
 
-			m_model->UpdateMorphAnimation();
+		m_model->UpdateMorphAnimation();
 
-			m_model->UpdateNodeAnimation(false);
+		// Bullet Physics: set "maxSubSteps" to "120"
+		m_model->UpdateNodeAnimation(true, float(frameCount) / 30.0f);
 
-			m_model->UpdatePhysicsAnimation(1.0f / 30.0f);
-
-			m_model->UpdateNodeAnimation(true);
-
-			m_model->EndAnimation();
-		}
+		m_model->EndAnimation();
 	}
 
 	int32_t VMDAnimation::CalculateMaxKeyTime() const
@@ -433,7 +515,7 @@ namespace saba
 	{
 		m_time = int32_t(motion.m_frame);
 
-		m_translate = motion.m_translate * glm::vec3(1, 1, -1);
+		m_translate = InvZ(motion.m_translate);
 
 		const glm::quat q = motion.m_quaternion;
 		auto rot0 = glm::mat3_cast(q);
@@ -441,9 +523,9 @@ namespace saba
 		m_rotate = glm::quat_cast(rot1);
 
 		SetVMDBezier(m_txBezier, &motion.m_interpolation[0]);
-		SetVMDBezier(m_tyBezier, &motion.m_interpolation[1]);
-		SetVMDBezier(m_tzBezier, &motion.m_interpolation[2]);
-		SetVMDBezier(m_rotBezier, &motion.m_interpolation[3]);
+		SetVMDBezier(m_tyBezier, &motion.m_interpolation[16]);
+		SetVMDBezier(m_tzBezier, &motion.m_interpolation[32]);
+		SetVMDBezier(m_rotBezier, &motion.m_interpolation[48]);
 	}
 
 	VMDIKController::VMDIKController()
