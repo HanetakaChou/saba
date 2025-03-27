@@ -6,31 +6,59 @@
 #ifndef SABA_MODEL_MMD_MMDMORPH_H
 #define SABA_MODEL_MMD_MMDMORPH_H
 
-#include <string>
+#include <cstddef>
+#include <cstdint>
 
-namespace saba
+enum BRX_ASSET_IMPORT_MORPH_TARGET_NAME : uint32_t
 {
-	class MMDMorph
-	{
-	public:
-		MMDMorph();
-
-		void SetName(const std::string& name) { m_name = name; }
-		const std::string& GetName() const { return m_name; }
-
-		void SetWeight(float weight) { m_weight = weight; }
-		float GetWeight() const { return m_weight; }
-
-		void SaveBaseAnimation() { m_saveAnimWeight = m_weight; }
-		void LoadBaseAnimation() { m_weight = m_saveAnimWeight; }
-		void ClearBaseAnimation() { m_saveAnimWeight = 0; }
-		float GetBaseAnimationWeight() const { return m_saveAnimWeight; }
-
-	private:
-		std::string	m_name;
-		float		m_weight;
-		float		m_saveAnimWeight;
-	};
-}
+    // にこり
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_BROW_HAPPY = 0,
+    // 怒り
+    // 真面目
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_BROW_ANGRY = 1,
+    // 困る
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_BROW_SAD = 2,
+    // 上
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_BROW_SURPRISED = 3,
+    // まばたき
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_BLINK = 4,
+    // ウィンク２
+    // ウィンク
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_BLINK_L = 5,
+    // ｳｨﾝｸ２右
+    // ウィンク右
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_BLINK_R = 6,
+    // 笑い
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_HAPPY = 7,
+    // ｷﾘｯ
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_ANGRY = 8,
+    // じと目
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_SAD = 9,
+    // びっくり
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_EYE_SURPRISED = 10,
+    // あ
+    // あ２
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_A = 11,
+    // い
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_I = 12,
+    // う
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_U = 13,
+    // え
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_E = 14,
+    // お
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_O = 15,
+    // にっこり
+    // にやり
+    // にやり２
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_HAPPY = 16,
+    // ∧
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_ANGRY = 17,
+    // 口角下げ
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_SAD = 18,
+    // ▲
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_MOUTH_SURPRISED = 19,
+    //
+    BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_COUNT = 20
+};
 
 #endif // !SABA_MODEL_MMD_MMDMORPH_H

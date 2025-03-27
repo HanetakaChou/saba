@@ -66,26 +66,6 @@ namespace saba
 		}
 	};
 
-	class MMDMorphManager
-	{
-	public:
-		static const size_t NPos = -1;
-
-		virtual size_t GetMorphCount() = 0;
-		virtual size_t FindMorphIndex(const std::string &name) = 0;
-		virtual MMDMorph *GetMorph(size_t idx) = 0;
-
-		MMDMorph *GetMorph(const std::string &name)
-		{
-			auto findIdx = FindMorphIndex(name);
-			if (findIdx == NPos)
-			{
-				return nullptr;
-			}
-			return GetMorph(findIdx);
-		}
-	};
-
 	class MMDPhysicsManager
 	{
 	public:
@@ -99,17 +79,8 @@ namespace saba
 
 		MMDPhysics *GetMMDPhysics();
 
-		MMDRigidBody *AddRigidBody();
-		std::vector<RigidBodyPtr> *GetRigidBodys() { return &m_rigidBodys; }
-
-		MMDJoint *AddJoint();
-		std::vector<JointPtr> *GetJoints() { return &m_joints; }
-
 	private:
 		std::unique_ptr<MMDPhysics> m_mmdPhysics;
-
-		std::vector<RigidBodyPtr> m_rigidBodys;
-		std::vector<JointPtr> m_joints;
 	};
 
 	struct MMDSubMesh
@@ -125,8 +96,10 @@ namespace saba
 	{
 	public:
 		virtual MMDNodeManager *GetNodeManager() = 0;
-		virtual MMDIKManager *GetIKManager() = 0;
-		virtual MMDMorphManager *GetMorphManager() = 0;
+		virtual void set_morph_target_name_weight(BRX_ASSET_IMPORT_MORPH_TARGET_NAME morph_target_name, float weight) = 0;
+		virtual float get_morph_target_name_weight(BRX_ASSET_IMPORT_MORPH_TARGET_NAME morph_target_name) const = 0;
+		virtual void set_ik_name_switch(BRX_ASSET_IMPORT_IK_NAME ik_name, bool enable) = 0;
+		virtual bool get_ik_name_switch(BRX_ASSET_IMPORT_IK_NAME ik_name) const = 0;
 		virtual MMDPhysicsManager *GetPhysicsManager() = 0;
 
 		virtual size_t GetVertexCount() const = 0;
@@ -153,9 +126,9 @@ namespace saba
 		virtual void InitializeAnimation() = 0;
 
 		// ベースアニメーション(アニメーション読み込み時、Physics反映用)
-		void SaveBaseAnimation();
-		void LoadBaseAnimation();
-		void ClearBaseAnimation();
+		virtual void SaveBaseAnimation() = 0;
+		virtual void LoadBaseAnimation() = 0;
+		virtual void ClearBaseAnimation() = 0;
 
 		// アニメーションの前後で呼ぶ (VMDアニメーションの前後)
 		virtual void BeginAnimation() = 0;
@@ -165,12 +138,9 @@ namespace saba
 		// ノードを更新する
 		[[deprecated("Please use UpdateAllAnimation() function")]]
 		void UpdateAnimation();
-		virtual void UpdateNodeAnimation(bool afterPhysicsAnim) = 0;
+		virtual void UpdateNodeAnimation(bool enablePhysics, float elapsed) = 0;
 		// Physicsを更新する
 		virtual void ResetPhysics() = 0;
-		[[deprecated("Please use UpdateAllAnimation() function")]]
-		void UpdatePhysics(float elapsed);
-		virtual void UpdatePhysicsAnimation(float elapsed) = 0;
 		// 頂点を更新する
 		virtual void Update() = 0;
 		virtual void SetParallelUpdateHint(uint32_t parallelCount) = 0;
@@ -230,102 +200,7 @@ namespace saba
 		private:
 			std::vector<NodePtr> m_nodes;
 		};
-
-		template <typename IKSolverType>
-		class MMDIKManagerT : public MMDIKManager
-		{
-		public:
-			using IKSolverPtr = std::unique_ptr<IKSolverType>;
-
-			size_t GetIKSolverCount() override { return m_ikSolvers.size(); }
-
-			size_t FindIKSolverIndex(const std::string &name) override
-			{
-				auto findIt = std::find_if(
-					m_ikSolvers.begin(),
-					m_ikSolvers.end(),
-					[&name](const IKSolverPtr &ikSolver)
-					{ return ikSolver->GetName() == name; });
-				if (findIt == m_ikSolvers.end())
-				{
-					return NPos;
-				}
-				else
-				{
-					return findIt - m_ikSolvers.begin();
-				}
-			}
-
-			MMDIkSolver *GetMMDIKSolver(size_t idx) override
-			{
-				return m_ikSolvers[idx].get();
-			}
-
-			IKSolverType *AddIKSolver()
-			{
-				m_ikSolvers.emplace_back(std::make_unique<IKSolverType>());
-				return m_ikSolvers[m_ikSolvers.size() - 1].get();
-			}
-
-			IKSolverType *GetIKSolver(size_t i)
-			{
-				return m_ikSolvers[i].get();
-			}
-
-			std::vector<IKSolverPtr> *GetIKSolvers()
-			{
-				return &m_ikSolvers;
-			}
-
-		private:
-			std::vector<IKSolverPtr> m_ikSolvers;
 		};
-
-		template <typename MorphType>
-		class MMDMorphManagerT : public MMDMorphManager
-		{
-		public:
-			using MorphPtr = std::unique_ptr<MorphType>;
-
-			size_t GetMorphCount() override { return m_morphs.size(); }
-
-			size_t FindMorphIndex(const std::string &name) override
-			{
-				auto findIt = std::find_if(
-					m_morphs.begin(),
-					m_morphs.end(),
-					[&name](const MorphPtr &morph)
-					{ return morph->GetName() == name; });
-				if (findIt == m_morphs.end())
-				{
-					return NPos;
-				}
-				else
-				{
-					return findIt - m_morphs.begin();
-				}
-			}
-
-			MMDMorph *GetMorph(size_t idx) override
-			{
-				return m_morphs[idx].get();
-			}
-
-			MorphType *AddMorph()
-			{
-				m_morphs.emplace_back(std::make_unique<MorphType>());
-				return m_morphs[m_morphs.size() - 1].get();
-			}
-
-			std::vector<MorphPtr> *GetMorphs()
-			{
-				return &m_morphs;
-			}
-
-		private:
-			std::vector<MorphPtr> m_morphs;
-		};
-	};
 }
 
 #endif // !SABA_MODEL_MMD_MMDMODEL_H_

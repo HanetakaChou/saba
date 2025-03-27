@@ -3,6 +3,11 @@
 // Distributed under the MIT License (http://opensource.org/licenses/MIT)
 //
 
+//
+// Copyright(c) HanetakaChou(YuqiaoZhang).
+// Distributed under the LGPL License (https://opensource.org/license/lgpl-2-1)
+//
+
 #ifndef SABA_MODEL_MMD_VMDANIMATION_H_
 #define SABA_MODEL_MMD_VMDANIMATION_H_
 
@@ -22,115 +27,12 @@ namespace saba
 {
 	struct VMDBezier
 	{
-		float EvalX(float t) const;
-		float EvalY(float t) const;
-		glm::vec2 Eval(float t) const;
+		uint8_t m_packed_k_1_x;
+		uint8_t m_packed_k_1_y;
+		uint8_t m_packed_k_2_x;
+		uint8_t m_packed_k_2_y;
 
-		float FindBezierX(float time) const;
-
-		glm::vec2	m_cp1;
-		glm::vec2	m_cp2;
-	};
-
-	struct VMDNodeAnimationKey
-	{
-		void Set(const VMDMotion& motion);
-
-		int32_t		m_time;
-		glm::vec3	m_translate;
-		glm::quat	m_rotate;
-
-		VMDBezier	m_txBezier;
-		VMDBezier	m_tyBezier;
-		VMDBezier	m_tzBezier;
-		VMDBezier	m_rotBezier;
-	};
-
-	struct VMDMorphAnimationKey
-	{
-		int32_t	m_time;
-		float	m_weight;
-	};
-
-	struct VMDIKAnimationKey
-	{
-		int32_t	m_time;
-		bool	m_enable;
-	};
-
-	class VMDNodeController
-	{
-	public:
-		using KeyType = VMDNodeAnimationKey;
-
-		VMDNodeController();
-
-		void SetNode(MMDNode* node);
-		void Evaluate(float t, float weight = 1.0f);
-		
-		void AddKey(const KeyType& key)
-		{
-			m_keys.push_back(key);
-		}
-		void SortKeys();
-		const  std::vector<KeyType>& GetKeys() const { return m_keys; }
-
-		MMDNode* GetNode() const { return m_node; }
-
-	private:
-		MMDNode*				m_node;
-		std::vector<KeyType>	m_keys;
-		size_t					m_startKeyIndex;
-	};
-
-	class VMDMorphController
-	{
-	public:
-		using KeyType = VMDMorphAnimationKey;
-
-		VMDMorphController();
-
-		void SetBlendKeyShape(MMDMorph* morph);
-		void Evaluate(float t, float weight = 1.0f);
-
-		void AddKey(const KeyType& key)
-		{
-			m_keys.push_back(key);
-		}
-		void SortKeys();
-		const std::vector<KeyType>& GetKeys() const { return m_keys; }
-
-		MMDMorph* GetMorph() const { return m_morph; }
-
-	private:
-		MMDMorph*				m_morph;
-		std::vector<KeyType>	m_keys;
-		size_t					m_startKeyIndex;
-	};
-
-	class VMDIKController
-	{
-	public:
-		using KeyType = VMDIKAnimationKey;
-
-		VMDIKController();
-
-		void SetIKSolver(MMDIkSolver* ikSolver);
-		void Evaluate(float t, float weight = 1.0f);
-
-		void AddKey(const KeyType& key)
-		{
-			m_keys.push_back(key);
-		}
-		void SortKeys();
-		const std::vector<KeyType>& GetKeys() const { return m_keys; }
-
-		MMDIkSolver* GetIkSolver() const { return m_ikSolver; }
-
-	private:
-		MMDIkSolver*			m_ikSolver;
-		std::vector<KeyType>	m_keys;
-		size_t					m_startKeyIndex;
+		float XToY(float const x) const;
 	};
 
 	class VMDAnimation
@@ -139,28 +41,25 @@ namespace saba
 		VMDAnimation();
 
 		bool Create(std::shared_ptr<MMDModel> model);
-		bool Add(const VMDFile& vmd);
+		bool Add(const VMDFile &vmd);
 		void Destroy();
 
-		void Evaluate(float t, float weight = 1.0f);
+		void Evaluate(float t);
 
 		// Physics を同期させる
 		void SyncPhysics(float t, int frameCount = 30);
 
-		int32_t GetMaxKeyTime() const { return m_maxKeyTime; };
 	private:
-		int32_t CalculateMaxKeyTime() const;
+		mcrt_vector<BRX_ASSET_IMPORT_MORPH_TARGET_NAME> m_weight_channel_names;
+		mcrt_vector<float> m_weights;
+		mcrt_vector<mcrt_string> m_rigid_transform_channel_names;
+		mcrt_vector<brx_asset_import_rigid_transform> m_rigid_transforms;
+		mcrt_vector<BRX_ASSET_IMPORT_IK_NAME> m_ik_switch_channel_names;
+		mcrt_vector<bool> m_ik_switches;
 
-	private:
-		using NodeControllerPtr = std::unique_ptr<VMDNodeController>;
-		using IKControllerPtr = std::unique_ptr<VMDIKController>;
-		using MorphControllerPtr = std::unique_ptr<VMDMorphController>;
+		uint32_t get_frame_count() const;
 
-		std::shared_ptr<MMDModel>			m_model;
-		std::vector<NodeControllerPtr>		m_nodeControllers;
-		std::vector<IKControllerPtr>		m_ikControllers;
-		std::vector<MorphControllerPtr>		m_morphControllers;
-		uint32_t	m_maxKeyTime;
+		std::shared_ptr<MMDModel> m_model;
 	};
 
 }

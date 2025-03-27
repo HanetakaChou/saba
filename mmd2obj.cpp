@@ -91,13 +91,7 @@ bool MMD2Obj(const std::vector<std::string>& args)
 	std::string ext = saba::PathUtil::GetExt(modelPath);
 	if (ext == "pmd")
 	{
-		auto pmdModel = std::make_unique<saba::PMDModel>();
-		if (!pmdModel->Load(modelPath, mmdDataPath))
-		{
-			std::cout << "Failed to load PMDModel.\n";
-			return false;
-		}
-		mmdModel = std::move(pmdModel);
+		assert(false);
 	}
 	else if (ext == "pmx")
 	{

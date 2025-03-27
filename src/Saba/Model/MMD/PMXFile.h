@@ -3,6 +3,11 @@
 // Distributed under the MIT License (http://opensource.org/licenses/MIT)
 //
 
+//
+// Copyright(c) HanetakaChou(YuqiaoZhang).
+// Distributed under the LGPL License (https://opensource.org/license/lgpl-2-1)
+//
+
 #ifndef SABA_MODEL_PMXFILE_H_
 #define SABA_MODEL_PMXFILE_H_
 
@@ -11,585 +16,319 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <map>
+#include <unordered_set>
+#include <unordered_map>
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#ifndef MCRT
+#define MCRT 1
+using mcrt_string = std::string;
+
+template <typename T>
+using mcrt_vector = std::vector<T>;
+
+template <typename Key, typename T, typename Compare = std::less<Key>>
+using mcrt_map = std::map<Key, T, Compare>;
+
+template <typename Key>
+using mcrt_unordered_set = std::unordered_set<Key, std::hash<Key>, std::equal_to<Key>>;
+
+template <typename Key, typename T>
+using mcrt_unordered_map = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>>;
+#endif
+
+#ifndef BRX_ASSET_IMPORT
+#define BRX_ASSET_IMPORT 1
+static constexpr uint32_t const BRX_ASSET_IMPORT_UINT32_INDEX_INVALID = static_cast<uint32_t>(~static_cast<uint32_t>(0U));
+
+enum BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_TYPE : uint32_t
+{
+	BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_COPY_TRANSFORM = 0,
+	BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_INVERSE_KINEMATICS = 1
+};
+
+enum BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_SHAPE_TYPE : uint32_t
+{
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_SHAPE_SPHERE = 0,
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_SHAPE_BOX = 1,
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_SHAPE_CAPSULE = 2
+};
+
+enum BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_MOTION_TYPE : uint32_t
+{
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_MOTION_FIXED = 0,
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_MOTION_KEYFRAME = 1,
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_MOTION_DYNAMIC = 2
+};
+
+enum BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_TYPE : uint32_t
+{
+	BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_FIXED = 0,
+	BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_BALL_AND_SOCKET = 1,
+	BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_HINGE = 2,
+	BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_PRISMATIC = 3,
+	BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_RAGDOLL = 4
+};
+
+struct brx_asset_import_vertex_position
+{
+	// R32G32B32_FLOAT
+	float m_position[3];
+};
+
+struct brx_asset_import_vertex_varying
+{
+	// R16G16_SNORM (octahedron map)
+	uint32_t m_normal;
+	// R15G15B2_SNORM (octahedron map + tangent w)
+	uint32_t m_tangent;
+	// R16G16_UNORM
+	uint32_t m_texcoord;
+};
+
+struct brx_asset_import_vertex_blending
+{
+	// R16G16B16A16_UINT (xy)
+	uint32_t m_indices_xy;
+	// R16G16B16A16_UINT (wz)
+	uint32_t m_indices_wz;
+	// R8G8B8A8_UNORM
+	uint32_t m_weights;
+};
+
+struct brx_asset_import_rigid_transform
+{
+	float m_rotation[4];
+	float m_translation[3];
+};
+
+struct brx_asset_import_skeleton_joint_constraint
+{
+	BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_TYPE m_constraint_type;
+
+	union
+	{
+		struct
+		{
+			uint32_t m_source_joint_index;
+			uint32_t m_source_weight_count;
+			float *m_source_weights;
+			uint32_t m_destination_joint_index;
+			bool m_copy_rotation;
+			bool m_copy_translation;
+		} m_copy_transform;
+
+		struct
+		{
+			uint32_t m_ik_end_effector_index;
+			uint32_t m_ik_joint_count;
+			uint32_t *m_ik_joint_indices;
+			uint32_t m_target_joint_index;
+			float m_ik_two_joints_hinge_joint_axis_local_space[3];
+			float m_cosine_max_ik_two_joints_hinge_joint_angle;
+			float m_cosine_min_ik_two_joints_hinge_joint_angle;
+		} m_inverse_kinematics;
+	};
+};
+
+struct brx_asset_import_physics_rigid_body
+{
+	brx_asset_import_rigid_transform m_model_space_transform;
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_SHAPE_TYPE m_shape_type;
+	float m_shape_size[3];
+	BRX_ASSET_IMPORT_PHYSICS_RIGID_BODY_MOTION_TYPE m_motion_type;
+	uint32_t m_collision_filter_group;
+	uint32_t m_collision_filter_mask;
+	float m_mass;
+	float m_linear_damping;
+	float m_angular_damping;
+	float m_friction;
+	float m_restitution;
+};
+
+struct brx_asset_import_physics_constraint
+{
+	uint32_t m_rigid_body_a_index;
+	uint32_t m_rigid_body_b_index;
+	BRX_ASSET_IMPORT_PHYSICS_CONSTRAINT_TYPE m_constraint_type;
+	float m_pivot[3];
+	float m_twist_axis[3];
+	float m_plane_axis[3];
+	float m_normal_axis[3];
+	float m_twist_limit[2];
+	float m_plane_limit[2];
+	float m_normal_limit[2];
+};
+
+struct brx_asset_import_ragdoll_direct_mapping
+{
+	uint32_t m_joint_index_a;
+	uint32_t m_joint_index_b;
+	float m_a_to_b_transform_model_space[4][4];
+};
+#endif
+
+struct mmd_pmx_vec2_t
+{
+	float m_x;
+	float m_y;
+};
+
+struct mmd_pmx_vec3_t
+{
+	float m_x;
+	float m_y;
+	float m_z;
+};
+
+struct mmd_pmx_vec4_t
+{
+	float m_x;
+	float m_y;
+	float m_z;
+	float m_w;
+};
+
+struct mmd_pmx_header_t
+{
+	mcrt_string m_name;
+	mcrt_string m_comment;
+};
+
+struct mmd_pmx_vertex_t
+{
+	mmd_pmx_vec3_t m_position;
+	mmd_pmx_vec3_t m_normal;
+	mmd_pmx_vec2_t m_uv;
+	uint32_t m_bone_indices[4];
+	float m_bone_weights[4];
+};
+
+struct mmd_pmx_face_t
+{
+	uint32_t m_vertex_indices[3];
+};
+
+struct mmd_pmx_texture_t
+{
+	mcrt_string m_path;
+};
+
+struct mmd_pmx_material_t
+{
+	mcrt_string m_name;
+	mmd_pmx_vec4_t m_diffuse;
+	bool m_is_double_sided;
+	uint32_t m_texture_index;
+	uint32_t m_face_count;
+};
+
+struct mmd_pmx_bone_t
+{
+	mcrt_string m_name;
+	mmd_pmx_vec3_t m_translation;
+	uint32_t m_parent_index;
+	uint32_t m_transformation_hierarchy;
+	bool m_meta_physics;
+	bool m_append_rotation;
+	bool m_append_translation;
+	bool m_append_local;
+	uint32_t m_append_parent_index;
+	float m_append_rate;
+	bool m_ik;
+	uint32_t m_ik_end_effector_index;
+	mcrt_vector<uint32_t> m_ik_link_indices;
+	bool m_ik_two_links_hinge_limit_angle;
+	mmd_pmx_vec3_t m_ik_two_links_hinge_limit_angle_min;
+	mmd_pmx_vec3_t m_ik_two_links_hinge_limit_angle_max;
+};
+
+union mmd_pmx_morph_offset_t
+{
+	struct
+	{
+		uint32_t m_morph_index;
+		float m_morph_weight;
+	} m_group;
+
+	struct
+	{
+		uint32_t m_vertex_index;
+		mmd_pmx_vec3_t m_vertex_position;
+	} m_vertex_position;
+
+	struct
+	{
+		uint32_t m_vertex_index;
+		mmd_pmx_vec2_t m_vertex_uv;
+	} m_vertex_uv;
+};
+
+struct mmd_pmx_morph_t
+{
+	mcrt_string m_name;
+	// 0: group
+	// 1: vertex position
+	// 2: vertex uv
+	// 3: empty
+	uint32_t m_morph_type;
+	mcrt_vector<mmd_pmx_morph_offset_t> m_offsets;
+};
+
+struct mmd_pmx_rigid_body_t
+{
+	mcrt_string m_name;
+	uint32_t m_bone_index;
+	uint32_t m_collision_filter_group;
+	uint32_t m_collision_filter_mask;
+	uint32_t m_shape_type;
+	mmd_pmx_vec3_t m_shape_size;
+	mmd_pmx_vec3_t m_translation;
+	mmd_pmx_vec3_t m_rotation;
+	float m_mass;
+	float m_linear_damping;
+	float m_angular_damping;
+	float m_friction;
+	float m_restitution;
+	uint32_t m_rigid_body_type;
+};
+
+struct mmd_pmx_constraint_t
+{
+	mcrt_string m_name;
+	uint32_t m_rigid_body_a_index;
+	uint32_t m_rigid_body_b_index;
+	mmd_pmx_vec3_t m_translation;
+	mmd_pmx_vec3_t m_rotation;
+	mmd_pmx_vec3_t m_translation_limit_min;
+	mmd_pmx_vec3_t m_translation_limit_max;
+	mmd_pmx_vec3_t m_rotation_limit_min;
+	mmd_pmx_vec3_t m_rotation_limit_max;
+};
+
+struct mmd_pmx_t
+{
+	mmd_pmx_header_t m_header;
+	mcrt_vector<mmd_pmx_vertex_t> m_vertices;
+	mcrt_vector<mmd_pmx_face_t> m_faces;
+	mcrt_vector<mmd_pmx_texture_t> m_textures;
+	mcrt_vector<mmd_pmx_material_t> m_materials;
+	mcrt_vector<mmd_pmx_bone_t> m_bones;
+	mcrt_vector<mmd_pmx_morph_t> m_morphs;
+	mcrt_vector<mmd_pmx_rigid_body_t> m_rigid_bodies;
+	mcrt_vector<mmd_pmx_constraint_t> m_constraints;
+};
+
 namespace saba
 {
-	template <size_t Size>
-	using PMXString = MMDFileString<Size>;
-
-	struct PMXHeader
-	{
-		PMXString<4> m_magic;
-		float m_version;
-
-		uint8_t m_dataSize;
-
-		uint8_t m_encode; // 0:UTF16 1:UTF8
-		uint8_t m_addUVNum;
-
-		uint8_t m_vertexIndexSize;
-		uint8_t m_textureIndexSize;
-		uint8_t m_materialIndexSize;
-		uint8_t m_boneIndexSize;
-		uint8_t m_morphIndexSize;
-		uint8_t m_rigidbodyIndexSize;
-	};
-
-	struct PMXInfo
-	{
-		std::string m_modelName;
-		std::string m_englishModelName;
-		std::string m_comment;
-		std::string m_englishComment;
-	};
-
-	/*
-	BDEF1
-	m_boneIndices[0]
-
-	BDEF2
-	m_boneIndices[0-1]
-	m_boneWeights[0]
-
-	BDEF4
-	m_boneIndices[0-3]
-	m_boneWeights[0-3]
-
-	SDEF
-	m_boneIndices[0-1]
-	m_boneWeights[0]
-	m_sdefC
-	m_sdefR0
-	m_sdefR1
-
-	QDEF
-	m_boneIndices[0-3]
-	m_boneWeights[0-3]
-	*/
-	enum class PMXVertexWeight : uint8_t
-	{
-		BDEF1,
-		BDEF2,
-		BDEF4,
-		SDEF,
-		QDEF,
-	};
-
-	struct PMXVertex
-	{
-		glm::vec3 m_position;
-		glm::vec3 m_normal;
-		glm::vec2 m_uv;
-
-		glm::vec4 m_addUV[4];
-
-		PMXVertexWeight m_weightType; // 0:BDEF1 1:BDEF2 2:BDEF4 3:SDEF 4:QDEF
-		int32_t m_boneIndices[4];
-		float m_boneWeights[4];
-		glm::vec3 m_sdefC;
-		glm::vec3 m_sdefR0;
-		glm::vec3 m_sdefR1;
-
-		float m_edgeMag;
-	};
-
-	struct PMXFace
-	{
-		uint32_t m_vertices[3];
-	};
-
-	struct PMXTexture
-	{
-		std::string m_textureName;
-	};
-
-	/*
-	0x01:両面描画
-	0x02:地面影
-	0x04:セルフシャドウマップへの描画
-	0x08:セルフシャドウの描画
-	0x10:エッジ描画
-	0x20:頂点カラー(※2.1拡張)
-	0x40:Point描画(※2.1拡張)
-	0x80:Line描画(※2.1拡張)
-	*/
-	enum class PMXDrawModeFlags : uint8_t
-	{
-		BothFace = 0x01,
-		GroundShadow = 0x02,
-		CastSelfShadow = 0x04,
-		RecieveSelfShadow = 0x08,
-		DrawEdge = 0x10,
-		VertexColor = 0x20,
-		DrawPoint = 0x40,
-		DrawLine = 0x80,
-	};
-
-	/*
-	0:無効
-	1:乗算
-	2:加算
-	3:サブテクスチャ(追加UV1のx,yをUV参照して通常テクスチャ描画を行う)
-	*/
-	enum class PMXSphereMode : uint8_t
-	{
-		None,
-		Mul,
-		Add,
-		SubTexture,
-	};
-
-	enum class PMXToonMode : uint8_t
-	{
-		Separate, //!< 0:個別Toon
-		Common,	  //!< 1:共有Toon[0-9] toon01.bmp～toon10.bmp
-	};
-
-	struct PMXMaterial
-	{
-		std::string m_name;
-		std::string m_englishName;
-
-		glm::vec4 m_diffuse;
-		glm::vec3 m_specular;
-		float m_specularPower;
-		glm::vec3 m_ambient;
-
-		PMXDrawModeFlags m_drawMode;
-
-		glm::vec4 m_edgeColor;
-		float m_edgeSize;
-
-		int32_t m_textureIndex;
-		int32_t m_sphereTextureIndex;
-		PMXSphereMode m_sphereMode;
-
-		PMXToonMode m_toonMode;
-		int32_t m_toonTextureIndex;
-
-		std::string m_memo;
-
-		int32_t m_numFaceVertices;
-	};
-
-	/*
-	0x0001  : 接続先(PMD子ボーン指定)表示方法 -> 0:座標オフセットで指定 1:ボーンで指定
-
-	0x0002  : 回転可能
-	0x0004  : 移動可能
-	0x0008  : 表示
-	0x0010  : 操作可
-
-	0x0020  : IK
-
-	0x0080  : ローカル付与 | 付与対象 0:ユーザー変形値／IKリンク／多重付与 1:親のローカル変形量
-	0x0100  : 回転付与
-	0x0200  : 移動付与
-
-	0x0400  : 軸固定
-	0x0800  : ローカル軸
-
-	0x1000  : 物理後変形
-	0x2000  : 外部親変形
-	*/
-	enum class PMXBoneFlags : uint16_t
-	{
-		TargetShowMode = 0x0001,
-		AllowRotate = 0x0002,
-		AllowTranslate = 0x0004,
-		Visible = 0x0008,
-		AllowControl = 0x0010,
-		IK = 0x0020,
-		AppendLocal = 0x0080,
-		AppendRotate = 0x0100,
-		AppendTranslate = 0x0200,
-		FixedAxis = 0x0400,
-		LocalAxis = 0x800,
-		DeformAfterPhysics = 0x1000,
-		DeformOuterParent = 0x2000,
-	};
-
-	struct PMXIKLink
-	{
-		int32_t m_ikBoneIndex;
-		unsigned char m_enableLimit;
-
-		// m_enableLimitが1のときのみ
-		glm::vec3 m_limitMin; // ラジアンで表現
-		glm::vec3 m_limitMax; // ラジアンで表現
-	};
-
-	struct PMXBone
-	{
-		std::string m_name;
-		std::string m_englishName;
-
-		glm::vec3 m_position;
-		int32_t m_parentBoneIndex;
-		int32_t m_deformDepth;
-
-		PMXBoneFlags m_boneFlag;
-
-		glm::vec3 m_positionOffset; // 接続先:0の場合
-		int32_t m_linkBoneIndex;	// 接続先:1の場合
-
-		// 「回転付与」または「移動付与」が有効のみ
-		int32_t m_appendBoneIndex;
-		float m_appendWeight;
-
-		// 「軸固定」が有効のみ
-		glm::vec3 m_fixedAxis;
-
-		// 「ローカル軸」が有効のみ
-		glm::vec3 m_localXAxis;
-		glm::vec3 m_localZAxis;
-
-		// 「外部親変形」が有効のみ
-		int32_t m_keyValue;
-
-		// 「IK」が有効のみ
-		int32_t m_ikTargetBoneIndex;
-		int32_t m_ikIterationCount;
-		float m_ikLimit; // ラジアンで表現
-
-		std::vector<PMXIKLink> m_ikLinks;
-	};
-
-	/*
-	0:グループ
-	1:頂点
-	2:ボーン,
-	3:UV,
-	4:追加UV1
-	5:追加UV2
-	6:追加UV3
-	7:追加UV4
-	8:材質
-	9:フリップ(※2.1拡張)
-	10:インパルス(※2.1拡張)
-	*/
-	enum class PMXMorphType : uint8_t
-	{
-		Group,
-		Position,
-		Bone,
-		UV,
-		AddUV1,
-		AddUV2,
-		AddUV3,
-		AddUV4,
-		Material,
-		Flip,
-		Impluse,
-	};
-
-	struct PMXMorph
-	{
-		std::string m_name;
-		std::string m_englishName;
-
-		uint8_t m_controlPanel; // 1:眉(左下) 2:目(左上) 3:口(右上) 4:その他(右下)  | 0:システム予約
-		PMXMorphType m_morphType;
-
-		struct PositionMorph
-		{
-			int32_t m_vertexIndex;
-			glm::vec3 m_position;
-		};
-
-		struct UVMorph
-		{
-			int32_t m_vertexIndex;
-			glm::vec4 m_uv;
-		};
-
-		struct BoneMorph
-		{
-			int32_t m_boneIndex;
-			glm::vec3 m_position;
-			glm::quat m_quaternion;
-		};
-
-		struct MaterialMorph
-		{
-			enum class OpType : uint8_t
-			{
-				Mul,
-				Add,
-			};
-
-			int32_t m_materialIndex;
-			OpType m_opType; // 0:乗算 1:加算
-			glm::vec4 m_diffuse;
-			glm::vec3 m_specular;
-			float m_specularPower;
-			glm::vec3 m_ambient;
-			glm::vec4 m_edgeColor;
-			float m_edgeSize;
-			glm::vec4 m_textureFactor;
-			glm::vec4 m_sphereTextureFactor;
-			glm::vec4 m_toonTextureFactor;
-		};
-
-		struct GroupMorph
-		{
-			int32_t m_morphIndex;
-			float m_weight;
-		};
-
-		struct FlipMorph
-		{
-			int32_t m_morphIndex;
-			float m_weight;
-		};
-
-		struct ImpulseMorph
-		{
-			int32_t m_rigidbodyIndex;
-			uint8_t m_localFlag; // 0:OFF 1:ON
-			glm::vec3 m_translateVelocity;
-			glm::vec3 m_rotateTorque;
-		};
-
-		std::vector<PositionMorph> m_positionMorph;
-		std::vector<UVMorph> m_uvMorph;
-		std::vector<BoneMorph> m_boneMorph;
-		std::vector<MaterialMorph> m_materialMorph;
-		std::vector<GroupMorph> m_groupMorph;
-		std::vector<FlipMorph> m_flipMorph;
-		std::vector<ImpulseMorph> m_impulseMorph;
-	};
-
-	struct PMXDisplayFrame
-	{
-
-		std::string m_name;
-		std::string m_englishName;
-
-		enum class TargetType : uint8_t
-		{
-			BoneIndex,
-			MorphIndex,
-		};
-		struct Target
-		{
-			TargetType m_type;
-			int32_t m_index;
-		};
-
-		enum class FrameType : uint8_t
-		{
-			DefaultFrame, //!< 0:通常枠
-			SpecialFrame, //!< 1:特殊枠
-		};
-
-		FrameType m_flag;
-		std::vector<Target> m_targets;
-	};
-
-	struct PMXRigidbody
-	{
-		std::string m_name;
-		std::string m_englishName;
-
-		int32_t m_boneIndex;
-		uint8_t m_group;
-		uint16_t m_collisionGroup;
-
-		/*
-		0:球
-		1:箱
-		2:カプセル
-		*/
-		enum class Shape : uint8_t
-		{
-			Sphere,
-			Box,
-			Capsule,
-		};
-		Shape m_shape;
-		glm::vec3 m_shapeSize;
-
-		glm::vec3 m_translate;
-		glm::vec3 m_rotate; // ラジアン
-
-		float m_mass;
-		float m_translateDimmer;
-		float m_rotateDimmer;
-		float m_repulsion;
-		float m_friction;
-
-		/*
-		0:ボーン追従(static)
-		1:物理演算(dynamic)
-		2:物理演算 + Bone位置合わせ
-		*/
-		enum class Operation : uint8_t
-		{
-			Static,
-			Dynamic,
-			DynamicAndBoneMerge
-		};
-		Operation m_op;
-	};
-
-	struct PMXJoint
-	{
-		std::string m_name;
-		std::string m_englishName;
-
-		/*
-		0:バネ付6DOF
-		1:6DOF
-		2:P2P
-		3:ConeTwist
-		4:Slider
-		5:Hinge
-		*/
-		enum class JointType : uint8_t
-		{
-			SpringDOF6,
-			DOF6,
-			P2P,
-			ConeTwist,
-			Slider,
-			Hinge,
-		};
-		JointType m_type;
-		int32_t m_rigidbodyAIndex;
-		int32_t m_rigidbodyBIndex;
-
-		glm::vec3 m_translate;
-		glm::vec3 m_rotate;
-
-		glm::vec3 m_translateLowerLimit;
-		glm::vec3 m_translateUpperLimit;
-		glm::vec3 m_rotateLowerLimit;
-		glm::vec3 m_rotateUpperLimit;
-
-		glm::vec3 m_springTranslateFactor;
-		glm::vec3 m_springRotateFactor;
-	};
-
-	struct PMXSoftbody
-	{
-		std::string m_name;
-		std::string m_englishName;
-
-		/*
-		0:TriMesh
-		1:Rope
-		*/
-		enum class SoftbodyType : uint8_t
-		{
-			TriMesh,
-			Rope,
-		};
-		SoftbodyType m_type;
-
-		int32_t m_materialIndex;
-
-		uint8_t m_group;
-		uint16_t m_collisionGroup;
-
-		/*
-		0x01:B-Link 作成
-		0x02:クラスタ作成
-		0x04: リンク交雑
-		*/
-		enum class SoftbodyMask : uint8_t
-		{
-			BLink = 0x01,
-			Cluster = 0x02,
-			HybridLink = 0x04,
-		};
-		SoftbodyMask m_flag;
-
-		int32_t m_BLinkLength;
-		int32_t m_numClusters;
-
-		float m_totalMass;
-		float m_collisionMargin;
-
-		/*
-		1:V_TwoSided
-		2:V_OneSided
-		3:F_TwoSided
-		4:F_OneSided
-		*/
-		enum class AeroModel : int32_t
-		{
-			kAeroModelV_TwoSided,
-			kAeroModelV_OneSided,
-			kAeroModelF_TwoSided,
-			kAeroModelF_OneSided,
-		};
-		int32_t m_aeroModel;
-
-		// config
-		float m_VCF;
-		float m_DP;
-		float m_DG;
-		float m_LF;
-		float m_PR;
-		float m_VC;
-		float m_DF;
-		float m_MT;
-		float m_CHR;
-		float m_KHR;
-		float m_SHR;
-		float m_AHR;
-
-		// cluster
-		float m_SRHR_CL;
-		float m_SKHR_CL;
-		float m_SSHR_CL;
-		float m_SR_SPLT_CL;
-		float m_SK_SPLT_CL;
-		float m_SS_SPLT_CL;
-
-		// interation
-		int32_t m_V_IT;
-		int32_t m_P_IT;
-		int32_t m_D_IT;
-		int32_t m_C_IT;
-
-		// material
-		float m_LST;
-		float m_AST;
-		float m_VST;
-
-		struct AnchorRigidbody
-		{
-			int32_t m_rigidBodyIndex;
-			int32_t m_vertexIndex;
-			uint8_t m_nearMode; // 0:FF 1:ON
-		};
-		std::vector<AnchorRigidbody> m_anchorRigidbodies;
-
-		std::vector<int32_t> m_pinVertexIndices;
-	};
-
 	struct PMXFile
 	{
-		PMXHeader m_header;
-		PMXInfo m_info;
-
-		std::vector<PMXVertex> m_vertices;
-		std::vector<PMXFace> m_faces;
-		std::vector<PMXTexture> m_textures;
-		std::vector<PMXMaterial> m_materials;
-		std::vector<PMXBone> m_bones;
-		std::vector<PMXMorph> m_morphs;
-		std::vector<PMXDisplayFrame> m_displayFrames;
-		std::vector<PMXRigidbody> m_rigidbodies;
-		std::vector<PMXJoint> m_joints;
-		std::vector<PMXSoftbody> m_softbodies;
+		mmd_pmx_t m_pmx;
 	};
 
 	bool ReadPMXFile(PMXFile *pmdFile, const char *filename);
