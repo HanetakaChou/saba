@@ -842,9 +842,7 @@ void Model::Clear()
 
 void Model::UpdateAnimation(const AppContext& appContext)
 {
-	m_mmdModel->BeginAnimation();
 	m_mmdModel->UpdateAllAnimation(m_vmdAnim.get(), appContext.m_animTime * 30.0f, appContext.m_elapsed);
-	m_mmdModel->EndAnimation();
 }
 
 void Model::Update(const AppContext& appContext)
@@ -1309,13 +1307,7 @@ bool SampleMain(std::vector<std::string>& args)
 		auto ext = saba::PathUtil::GetExt(input.m_modelPath);
 		if (ext == "pmd")
 		{
-			auto pmdModel = std::make_unique<saba::PMDModel>();
-			if (!pmdModel->Load(input.m_modelPath, appContext.m_mmdDir))
-			{
-				std::cout << "Failed to load pmd file.\n";
-				return false;
-			}
-			model.m_mmdModel = std::move(pmdModel);
+			assert(false);
 		}
 		else if (ext == "pmx")
 		{
@@ -1349,19 +1341,10 @@ bool SampleMain(std::vector<std::string>& args)
 				std::cout << "Failed to read VMD file.\n";
 				return false;
 			}
-			if (!vmdAnim->Add(vmdFile))
+			if (!vmdAnim->Add(vmdFile, vmdPath.c_str()))
 			{
 				std::cout << "Failed to add VMDAnimation.\n";
 				return false;
-			}
-			if (!vmdFile.m_cameras.empty())
-			{
-				auto vmdCamAnim = std::make_unique<saba::VMDCameraAnimation>();
-				if (!vmdCamAnim->Create(vmdFile))
-				{
-					std::cout << "Failed to create VMDCameraAnimation.\n";
-				}
-				appContext.m_vmdCameraAnim = std::move(vmdCamAnim);
 			}
 		}
 		vmdAnim->SyncPhysics(0.0f);

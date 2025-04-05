@@ -16,12 +16,8 @@
 
 namespace saba
 {
-	GLMMDModelDrawer::GLMMDModelDrawer(GLMMDModelDrawContext * ctxt, std::shared_ptr<GLMMDModel> mmdModel)
-		: m_drawContext(ctxt)
-		, m_mmdModel(mmdModel)
-		, m_clipElapsed(true)
-		, m_viewLocal(true)
-		, m_selectedNode(nullptr)
+	GLMMDModelDrawer::GLMMDModelDrawer(GLMMDModelDrawContext *ctxt, std::shared_ptr<GLMMDModel> mmdModel)
+		: m_drawContext(ctxt), m_mmdModel(mmdModel), m_clipElapsed(true), m_viewLocal(true)
 	{
 		SABA_ASSERT(ctxt != nullptr);
 		SABA_ASSERT(mmdModel != nullptr);
@@ -35,7 +31,7 @@ namespace saba
 	bool GLMMDModelDrawer::Create()
 	{
 		int matIdx = 0;
-		for (const auto& mat : m_mmdModel->GetMaterials())
+		for (const auto &mat : m_mmdModel->GetMaterials())
 		{
 			GLSLDefine define;
 
@@ -133,8 +129,7 @@ namespace saba
 			}
 
 			auto groundShadowShader = m_drawContext->GetGroundShadowShader(
-				matShader.m_mmdGroundShadowShaderIndex
-			);
+				matShader.m_mmdGroundShadowShaderIndex);
 
 			glBindVertexArray(matShader.m_mmdGroundShadowVao);
 
@@ -156,176 +151,32 @@ namespace saba
 	void GLMMDModelDrawer::Destroy()
 	{
 		m_materialShaders.clear();
-		m_selectedNode = nullptr;
 	}
 
-	void GLMMDModelDrawer::DrawUI(ViewerContext * ctxt)
+	void GLMMDModelDrawer::DrawUI(ViewerContext *ctxt)
 	{
-		if (ImGui::TreeNode("Bone"))
-		{
-			std::string name = "";
-			if (m_selectedNode != nullptr)
-			{
-				name = m_selectedNode->GetName();
-			}
-			ImGui::Text("name:%s", name.c_str());
 
-			if (ImGui::RadioButton("Local", m_viewLocal))
-			{
-				m_viewLocal = true;
-			}
-			if (ImGui::RadioButton("Global", !m_viewLocal))
-			{
-				m_viewLocal = false;
-			}
-			glm::vec3 t(0);
-			glm::quat q;
-			if (m_selectedNode != nullptr)
-			{
-				if (m_viewLocal)
-				{
-					auto local = m_selectedNode->GetLocalTransform();
-					t = glm::vec3(local[3]);
-					q = glm::quat_cast(local);
-				}
-				else
-				{
-					auto global = m_selectedNode->GetGlobalTransform();
-					t = glm::vec3(global[3]);
-					q = glm::quat_cast(global);
-				}
-			}
-			ImGui::InputFloat3("T", &t[0], ImGuiInputTextFlags_ReadOnly);
-			ImGui::InputFloat4("Q", &q[0], ImGuiInputTextFlags_ReadOnly);
-			auto model = m_mmdModel->GetMMDModel();
-			auto nodeMan = model->GetNodeManager();
-			MMDNode* clickNode = nullptr;
-			for (size_t nodeIdx = 0; nodeIdx < nodeMan->GetNodeCount(); nodeIdx++)
-			{
-				std::function<void(MMDNode*)> ViewNodes = [&ViewNodes, &clickNode, this](saba::MMDNode* node)
-				{
-					ImGuiTreeNodeFlags node_flags =
-						ImGuiTreeNodeFlags_OpenOnArrow |
-						ImGuiTreeNodeFlags_OpenOnDoubleClick |
-						((this->m_selectedNode == node) ? ImGuiTreeNodeFlags_Selected : 0);
-					if (node->GetChild() != nullptr)
-					{
-						if (ImGui::TreeNodeEx(node->GetName().c_str(), node_flags))
-						{
-							auto child = node->GetChild();
-							while (child != nullptr)
-							{
-								ViewNodes(child);
-								child = child->GetNext();
-							}
-							ImGui::TreePop();
-						}
-					}
-					else
-					{
-						node_flags |=
-							ImGuiTreeNodeFlags_Leaf |
-							ImGuiTreeNodeFlags_NoTreePushOnOpen;
-						ImGui::TreeNodeEx(node->GetName().c_str(), node_flags);
-					}
-					if (clickNode == nullptr && ImGui::IsItemClicked())
-					{
-						clickNode = node;
-					}
-				};
-				auto node = nodeMan->GetMMDNode(nodeIdx);
-				if (node->GetParent() == nullptr)
-				{
-					ViewNodes(node);
-				}
-			}
-
-			ImGui::TreePop();
-			if (clickNode != nullptr)
-			{
-				m_selectedNode = clickNode;
-			}
-		}
-		if (ImGui::TreeNode("Physics"))
-		{
-			bool enabledPhysics = m_mmdModel->IsEnabledPhysics();
-			if (ImGui::Checkbox("Enable", &enabledPhysics))
-			{
-				m_mmdModel->EnablePhysics(enabledPhysics);
-			}
-			auto physics = m_mmdModel->GetMMDModel()->GetMMDPhysics();
-			float fps = physics->GetFPS();
-			if (ImGui::InputFloat("FPS", &fps, 0, 0, 1))
-			{
-				if (1 <= fps)
-				{
-					physics->SetFPS(fps);
-				}
-			}
-			int subStepCount = physics->GetMaxSubStepCount();
-			if (ImGui::SliderInt("Max Sub Step", &subStepCount, 1, 100))
-			{
-				physics->SetMaxSubStepCount(subStepCount);
-			}
-			ImGui::TreePop();
-		}
-		if (ImGui::TreeNode("Morph"))
-		{
-			auto model = m_mmdModel->GetMMDModel();
-			auto morphMan = model->GetMorphManager();
-			size_t morphCount = morphMan->GetMorphCount();
-			for (size_t morphIdx = 0; morphIdx < morphCount; morphIdx++)
-			{
-				auto morph = morphMan->GetMorph(morphIdx);
-				float weight = morph->GetWeight();
-				if (ImGui::SliderFloat(morph->GetName().c_str(), &weight, 0.0f, 1.0f))
-				{
-					morph->SetWeight(weight);
-					auto animTime = ctxt->GetAnimationTime();
-					m_mmdModel->UpdateMorph();
-				}
-			}
-			ImGui::TreePop();
-		}
-		if (ImGui::TreeNode("Edge"))
-		{
-			bool enableEdge = m_mmdModel->IsEnabledEdge();
-			if (ImGui::Checkbox("Enable", &enableEdge))
-			{
-				m_mmdModel->EnableEdge(enableEdge);
-			}
-			ImGui::TreePop();
-		}
-		if (ImGui::TreeNode("GraoundShadow"))
-		{
-			bool enableGroundShadow = m_mmdModel->IsEnableGroundShadow();
-			if (ImGui::Checkbox("Enable", &enableGroundShadow))
-			{
-				m_mmdModel->EnableGroundShadow(enableGroundShadow);
-			}
-			ImGui::TreePop();
-		}
 	}
 
-	void GLMMDModelDrawer::DrawShadowMap(ViewerContext * ctxt, size_t csmIdx)
+	void GLMMDModelDrawer::DrawShadowMap(ViewerContext *ctxt, size_t csmIdx)
 	{
 		const auto shadowMap = ctxt->GetShadowMap();
 		const auto shader = shadowMap->GetShader();
-		const auto& clipSpace = shadowMap->GetClipSpace(csmIdx);
+		const auto &clipSpace = shadowMap->GetClipSpace(csmIdx);
 
-		const auto& world = GetTransform();
-		const auto& view = shadowMap->GetShadowViewMatrix();
-		const auto& proj = clipSpace.m_projection;
+		const auto &world = GetTransform();
+		const auto &view = shadowMap->GetShadowViewMatrix();
+		const auto &proj = clipSpace.m_projection;
 		auto wvp = proj * view * world;
 
 		glUseProgram(shader->m_prog);
 		SetUniform(shader->m_uWVP, wvp);
 
-		for (const auto& subMesh : m_mmdModel->GetSubMeshes())
+		for (const auto &subMesh : m_mmdModel->GetSubMeshes())
 		{
 			int matID = subMesh.m_materialID;
-			const auto& matShader = m_materialShaders[matID];
-			const auto& mmdMat = m_mmdModel->GetMaterials()[matID];
+			const auto &matShader = m_materialShaders[matID];
+			const auto &mmdMat = m_mmdModel->GetMaterials()[matID];
 			if (!mmdMat.m_shadowCaster)
 			{
 				continue;
@@ -348,8 +199,7 @@ namespace saba
 				GL_TRIANGLES,
 				subMesh.m_vertexCount,
 				m_mmdModel->GetIndexType(),
-				(GLvoid*)offset
-			);
+				(GLvoid *)offset);
 
 			glBindVertexArray(0);
 		}
@@ -365,12 +215,12 @@ namespace saba
 	{
 	}
 
-	void GLMMDModelDrawer::ResetAnimation(ViewerContext * ctxt)
+	void GLMMDModelDrawer::ResetAnimation(ViewerContext *ctxt)
 	{
 		m_mmdModel->ResetAnimation();
 	}
 
-	void GLMMDModelDrawer::Update(ViewerContext * ctxt)
+	void GLMMDModelDrawer::Update(ViewerContext *ctxt)
 	{
 		m_mmdModel->ClearPerfInfo();
 
@@ -388,13 +238,12 @@ namespace saba
 		m_mmdModel->Update();
 	}
 
-
-	void GLMMDModelDrawer::Draw(ViewerContext * ctxt)
+	void GLMMDModelDrawer::Draw(ViewerContext *ctxt)
 	{
-		const auto& view = ctxt->GetCamera()->GetViewMatrix();
-		const auto& proj = ctxt->GetCamera()->GetProjectionMatrix();
+		const auto &view = ctxt->GetCamera()->GetViewMatrix();
+		const auto &proj = ctxt->GetCamera()->GetProjectionMatrix();
 
-		const auto& world = GetTransform();
+		const auto &world = GetTransform();
 		auto wv = view * world;
 		auto wvp = proj * view * world;
 		auto wvit = glm::mat3(view * world);
@@ -402,17 +251,17 @@ namespace saba
 		wvit = glm::transpose(wvit);
 
 		const static size_t MaxShadowMap = 4;
-		GLint shadowMapTexs[MaxShadowMap] = { 0 };
+		GLint shadowMapTexs[MaxShadowMap] = {0};
 		glm::mat4 shadowMapVPs[MaxShadowMap];
 		auto shadowMap = ctxt->GetShadowMap();
 		size_t numShadowMap = glm::min(MaxShadowMap, shadowMap->GetShadowMapCount());
-		const float* shadowMapSplitPositions = shadowMap->GetSplitPositions();
+		const float *shadowMapSplitPositions = shadowMap->GetSplitPositions();
 		size_t numShadowMapSplitPosition = glm::max(MaxShadowMap + 1, shadowMap->GetSplitPositionCount());
 		if (ctxt->IsShadowEnabled())
 		{
 			for (size_t i = 0; i < numShadowMap; i++)
 			{
-				const auto& clipSpace = shadowMap->GetClipSpace(i);
+				const auto &clipSpace = shadowMap->GetClipSpace(i);
 				GLint texIdx = GLint(i + 3);
 				glActiveTexture(GL_TEXTURE0 + texIdx);
 				glBindTexture(GL_TEXTURE_2D, clipSpace.m_shadomap);
@@ -432,7 +281,7 @@ namespace saba
 		{
 			for (size_t i = 0; i < numShadowMap; i++)
 			{
-				const auto& clipSpace = shadowMap->GetClipSpace(i);
+				const auto &clipSpace = shadowMap->GetClipSpace(i);
 				GLint texIdx = GLint(i + 3);
 				glActiveTexture(GL_TEXTURE0 + texIdx);
 				glBindTexture(GL_TEXTURE_2D, ctxt->GetDummyShadowDepthTexture());
@@ -440,11 +289,11 @@ namespace saba
 			}
 		}
 
-		for (const auto& subMesh : m_mmdModel->GetSubMeshes())
+		for (const auto &subMesh : m_mmdModel->GetSubMeshes())
 		{
 			int matID = subMesh.m_materialID;
-			const auto& matShader = m_materialShaders[matID];
-			const auto& mmdMat = m_mmdModel->GetMaterials()[matID];
+			const auto &matShader = m_materialShaders[matID];
+			const auto &mmdMat = m_mmdModel->GetMaterials()[matID];
 			auto shader = m_drawContext->GetShader(matShader.m_mmdShaderIndex);
 
 			if (mmdMat.m_alpha == 0.0f)
@@ -580,8 +429,7 @@ namespace saba
 				GL_TRIANGLES,
 				subMesh.m_vertexCount,
 				m_mmdModel->GetIndexType(),
-				(GLvoid*)offset
-			);
+				(GLvoid *)offset);
 
 			glActiveTexture(GL_TEXTURE0 + 2);
 			glBindTexture(GL_TEXTURE_2D, 0);
@@ -604,11 +452,11 @@ namespace saba
 		if (m_mmdModel->IsEnabledEdge())
 		{
 			glm::vec2 screenSize(ctxt->GetFrameBufferWidth(), ctxt->GetFrameBufferHeight());
-			for (const auto& subMesh : m_mmdModel->GetSubMeshes())
+			for (const auto &subMesh : m_mmdModel->GetSubMeshes())
 			{
 				int matID = subMesh.m_materialID;
-				const auto& matShader = m_materialShaders[matID];
-				const auto& mmdMat = m_mmdModel->GetMaterials()[matID];
+				const auto &matShader = m_materialShaders[matID];
+				const auto &mmdMat = m_mmdModel->GetMaterials()[matID];
 				auto shader = m_drawContext->GetEdgeShader(matShader.m_mmdEdgeShaderIndex);
 
 				if (!mmdMat.m_edgeFlag)
@@ -649,8 +497,7 @@ namespace saba
 					GL_TRIANGLES,
 					subMesh.m_vertexCount,
 					m_mmdModel->GetIndexType(),
-					(GLvoid*)offset
-				);
+					(GLvoid *)offset);
 
 				glBindVertexArray(0);
 				glUseProgram(0);
@@ -703,11 +550,11 @@ namespace saba
 			}
 			glDisable(GL_CULL_FACE);
 
-			for (const auto& subMesh : m_mmdModel->GetSubMeshes())
+			for (const auto &subMesh : m_mmdModel->GetSubMeshes())
 			{
 				int matID = subMesh.m_materialID;
-				const auto& matShader = m_materialShaders[matID];
-				const auto& mmdMat = m_mmdModel->GetMaterials()[matID];
+				const auto &matShader = m_materialShaders[matID];
+				const auto &mmdMat = m_mmdModel->GetMaterials()[matID];
 				if (!mmdMat.m_groundShadow)
 				{
 					continue;
@@ -730,8 +577,7 @@ namespace saba
 					GL_TRIANGLES,
 					subMesh.m_vertexCount,
 					m_mmdModel->GetIndexType(),
-					(GLvoid*)offset
-				);
+					(GLvoid *)offset);
 
 				glBindVertexArray(0);
 				glUseProgram(0);
@@ -749,4 +595,3 @@ namespace saba
 		glDisable(GL_CULL_FACE);
 	}
 }
-
