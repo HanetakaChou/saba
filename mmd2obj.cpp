@@ -91,13 +91,7 @@ bool MMD2Obj(const std::vector<std::string>& args)
 	std::string ext = saba::PathUtil::GetExt(modelPath);
 	if (ext == "pmd")
 	{
-		auto pmdModel = std::make_unique<saba::PMDModel>();
-		if (!pmdModel->Load(modelPath, mmdDataPath))
-		{
-			std::cout << "Failed to load PMDModel.\n";
-			return false;
-		}
-		mmdModel = std::move(pmdModel);
+		assert(false);
 	}
 	else if (ext == "pmx")
 	{
@@ -131,7 +125,7 @@ bool MMD2Obj(const std::vector<std::string>& args)
 			std::cout << "Failed to read VMD file.\n";
 			return false;
 		}
-		if (!vmdAnim->Add(vmdFile))
+		if (!vmdAnim->Add(vmdFile, vmdPath.c_str()))
 		{
 			std::cout << "Failed to add VMDAnimation.\n";
 			return false;
@@ -174,7 +168,6 @@ bool MMD2Obj(const std::vector<std::string>& args)
 	// Update animation(animation loop).
 	{
 		// Update animation.
-		mmdModel->BeginAnimation();
 		if (useVMDAnimation)
 		{
 			mmdModel->UpdateAllAnimation(vmdAnim.get(), (float)animTime * 30.0f, 1.0f / 60.0f);
@@ -183,7 +176,6 @@ bool MMD2Obj(const std::vector<std::string>& args)
 		{
 			mmdModel->UpdateAllAnimation(nullptr, 0, 1.0f / 60.0f);
 		}
-		mmdModel->EndAnimation();
 
 		// Update vertices.
 		mmdModel->Update();

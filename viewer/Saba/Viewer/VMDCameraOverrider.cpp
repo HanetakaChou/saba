@@ -6,10 +6,10 @@ namespace saba
 	{
 	}
 
-	bool VMDCameraOverrider::Create(const VMDFile& vmdFile)
+	bool VMDCameraOverrider::Create()
 	{
 		m_camAnim.Destroy();
-		return m_camAnim.Create(vmdFile);
+		return m_camAnim.Create();
 	}
 
 	void VMDCameraOverrider::OnOverride(ViewerContext* ctxt, Camera* camera)

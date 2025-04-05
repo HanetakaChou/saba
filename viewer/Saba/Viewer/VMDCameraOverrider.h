@@ -18,7 +18,7 @@ namespace saba
 	public:
 		VMDCameraOverrider();
 
-		bool Create(const VMDFile& vmdFile);
+		bool Create();
 
 	protected:
 		void OnOverride(ViewerContext* viewer, Camera* camera) override;

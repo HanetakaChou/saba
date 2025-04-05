@@ -47,50 +47,6 @@
 
 namespace saba
 {
-	class ImGUILogSink : public spdlog::sinks::sink
-	{
-	public:
-		explicit ImGUILogSink(size_t maxBufferSize = 100)
-			: m_maxBufferSize(maxBufferSize)
-			, m_added(false)
-		{
-		}
-
-		void log(const spdlog::details::log_msg& msg) override
-		{
-			while (m_buffer.size() >= m_maxBufferSize)
-			{
-				if (m_buffer.empty())
-				{
-					break;
-				}
-				m_buffer.pop_front();
-			}
-
-			m_buffer.emplace_back(LogMessage{msg.level, msg.formatted.str()});
-			m_added = true;
-		}
-
-		void flush() override
-		{
-		}
-
-		struct LogMessage
-		{
-			spdlog::level::level_enum	m_level;
-			std::string					m_message;
-		};
-		const std::deque<LogMessage>& GetBuffer() const { return m_buffer; }
-
-		bool IsAdded() const { return m_added; }
-		void ClearAddedFlag() { m_added = false; }
-
-	private:
-		size_t					m_maxBufferSize;
-		std::deque<LogMessage>	m_buffer;
-		bool					m_added;
-	};
-
 	Viewer::InitializeParameter::InitializeParameter()
 		: m_msaaEnable(false)
 		, m_msaaCount(4)
@@ -126,7 +82,6 @@ namespace saba
 		, m_modelNameID(1)
 		, m_enableInfoUI(true)
 		, m_enableMoreInfoUI(false)
-		, m_enableLogUI(true)
 		, m_enableCommandUI(true)
 		, m_enableManip(false)
 		, m_currentManipOp(ImGuizmo::TRANSLATE)
@@ -167,9 +122,6 @@ namespace saba
 		SABA_INFO("Execute Path = {}", PathUtil::GetExecutablePath());
 
 		m_initParam = initParam;
-
-		auto logger = Singleton<saba::Logger>::Get();
-		m_imguiLogSink = logger->AddSink<ImGUILogSink>();
 
 		SABA_INFO("CurDir = {}", m_context.GetWorkDir());
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -282,10 +234,6 @@ namespace saba
 
 	void Viewer::Uninitislize()
 	{
-		auto logger = Singleton<saba::Logger>::Get();
-		logger->RemoveSink(m_imguiLogSink.get());
-		m_imguiLogSink.reset();
-
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
@@ -804,7 +752,6 @@ namespace saba
 			{
 				ImGui::MenuItem("Info", nullptr, &m_enableInfoUI);
 				ImGui::MenuItem("More Info", nullptr, &m_enableMoreInfoUI);
-				ImGui::MenuItem("Log", nullptr, &m_enableLogUI);
 				ImGui::MenuItem("Command", nullptr, &m_enableCommandUI);
 				ImGui::MenuItem("Control", nullptr, &m_enableCtrlUI);
 				ImGui::EndMenu();
@@ -899,7 +846,6 @@ namespace saba
 	void Viewer::DrawUI()
 	{
 		DrawInfoUI();
-		DrawLogUI();
 		DrawCommandUI();
 		if (m_enableManip)
 		{
@@ -1047,71 +993,6 @@ namespace saba
 				}
 			}
 		}
-		ImGui::End();
-	}
-
-	void Viewer::DrawLogUI()
-	{
-		if (!m_enableLogUI)
-		{
-			return;
-		}
-
-		float width = 500;
-		float height = 400;
-
-		ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowPos(
-			ImVec2((float)(m_context.GetWindowWidth()) - width, (float)(m_context.GetWindowHeight()) - height - 80),
-			ImGuiCond_FirstUseEver
-		);
-		ImGui::Begin("Log", &m_enableLogUI);
-		ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-		for (const auto& log : m_imguiLogSink->GetBuffer())
-		{
-			ImVec4 col = ImColor(255, 255, 255, 255);
-			switch (log.m_level)
-			{
-			case spdlog::level::trace:
-				col = ImColor(73, 248, 255, 255);
-				break;
-			case spdlog::level::debug:
-				col = ImColor(184, 255, 160, 255);
-				break;
-			case spdlog::level::info:
-				col = ImColor(255, 255, 255, 255);
-				break;
-			case spdlog::level::warn:
-				col = ImColor(255, 238, 7, 255);
-				break;
-			case spdlog::level::err:
-				col = ImColor(255, 0, 67, 255);
-				break;
-			case spdlog::level::critical:
-				col = ImColor(198, 35, 67, 255);
-				break;
-			case spdlog::level::off:
-				col = ImColor(128, 128, 128, 255);
-				break;
-			default:
-				col = ImColor(255, 255, 255, 255);
-				break;
-			}
-			ImGui::PushStyleColor(ImGuiCol_Text, col);
-			ImGui::TextUnformatted(log.m_message.c_str());
-			ImGui::PopStyleColor();
-		}
-		// スクロールする場合、最後の行が見えなくなるため、ダミーの行を追加
-		ImGui::TextUnformatted("");
-
-		if (m_imguiLogSink->IsAdded())
-		{
-			ImGui::SetScrollHere(1.0f);
-			m_imguiLogSink->ClearAddedFlag();
-		}
-
-		ImGui::EndChild();
 		ImGui::End();
 	}
 
@@ -2383,44 +2264,8 @@ namespace saba
 
 	bool Viewer::LoadPMDFile(const std::string & filename)
 	{
-		std::shared_ptr<PMDModel> pmdModel = std::make_shared<PMDModel>();
-		std::string mmdDataDir = PathUtil::Combine(
-			m_context.GetResourceDir(),
-			"mmd"
-		);
-		pmdModel->SetParallelUpdateHint(m_mmdModelConfig.m_parallelUpdateCount);
-		if (!pmdModel->Load(filename, mmdDataDir))
-		{
-			SABA_WARN("PMD Load Fail.");
-			return false;
-		}
-
-		std::shared_ptr<GLMMDModel> glMMDModel = std::make_shared<GLMMDModel>();
-		if (!glMMDModel->Create(pmdModel))
-		{
-			SABA_WARN("GLMMDModel Create Fail.");
-			return false;
-		}
-
-		auto mmdDrawer = std::make_unique<GLMMDModelDrawer>(
-			m_mmdModelDrawContext.get(),
-			glMMDModel
-			);
-		if (!mmdDrawer->Create())
-		{
-			SABA_WARN("GLMMDModelDrawer Create Fail.");
-			return false;
-		}
-		m_modelDrawers.emplace_back(std::move(mmdDrawer));
-		m_selectedModelDrawer = m_modelDrawers[m_modelDrawers.size() - 1];
-		m_selectedModelDrawer->SetName(GetNewModelName());
-		m_selectedModelDrawer->SetBBox(pmdModel->GetBBoxMin(), pmdModel->GetBBoxMax());
-
-		InitializeScene();
-
-		m_prevTime = GetTime();
-
-		return true;
+		assert(false);
+		return false;
 	}
 
 	bool Viewer::LoadPMXFile(const std::string & filename)
@@ -2479,23 +2324,7 @@ namespace saba
 			return false;
 		}
 
-		VMDFile vmd;
-		if (!ReadVMDFile(&vmd, filename.c_str()))
-		{
-			return false;
-		}
-
-		if (!vmd.m_cameras.empty())
-		{
-			auto vmdCamOverrider = std::make_unique<VMDCameraOverrider>();
-			if (!vmdCamOverrider->Create(vmd))
-			{
-				return false;
-			}
-			m_cameraOverrider = std::move(vmdCamOverrider);
-		}
-
-		return mmdModel->LoadAnimation(vmd);
+		return mmdModel->LoadAnimation(filename.c_str());
 	}
 
 	bool Viewer::LoadVPDFile(const std::string & filename)

@@ -153,7 +153,6 @@ namespace saba
 		void DrawCustomMenu(CustomCommandMenuItem* parentItem);
 		void DrawUI();
 		void DrawInfoUI();
-		void DrawLogUI();
 		void DrawCommandUI();
 		void DrawManip();
 		void DrawCtrlUI();
@@ -276,10 +275,6 @@ namespace saba
 		// InfoUI
 		bool	m_enableInfoUI;
 		bool	m_enableMoreInfoUI;
-
-		// LogUI
-		std::shared_ptr<ImGUILogSink>	m_imguiLogSink;
-		bool							m_enableLogUI;
 
 		// CommandUI
 		bool	m_enableCommandUI;

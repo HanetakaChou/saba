@@ -67,7 +67,6 @@ namespace saba
 		// IMGui
 		bool		m_clipElapsed;
 		bool		m_viewLocal;
-		MMDNode*	m_selectedNode;
 	};
 }
 

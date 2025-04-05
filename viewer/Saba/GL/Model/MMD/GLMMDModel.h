@@ -54,7 +54,7 @@ namespace saba
 		bool Create(std::shared_ptr<MMDModel> mmdModel);
 		void Destroy();
 
-		bool LoadAnimation(const VMDFile& vmd);
+		bool LoadAnimation(const char *filename);
 		void LoadPose(const VPDFile& vpd, int frameCount = 30);
 
 		/*
@@ -68,7 +68,7 @@ namespace saba
 
 		void SetAnimationTime(double time);
 		double GetAnimationTime() const;
-		void EvaluateAnimation(double animTime);
+		void EvaluateAnimation(double animTime, double elapsed);
 		void UpdateAnimation(double animTime, double elapsed);
 		void UpdateAnimationIgnoreVMD(double elapsed);
 		void UpdateMorph();
