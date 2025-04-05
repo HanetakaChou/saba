@@ -16,21 +16,5 @@
 
 namespace saba
 {
-	DefaultSink::DefaultSink()
-	{
-		m_defaultLogger = spdlog::stdout_color_mt("default");
-#if _WIN32
-		SetConsoleOutputCP(CP_UTF8);
-#endif // _WIN32
-	}
 
-	void DefaultSink::log(const spdlog::details::log_msg & msg)
-	{
-		m_defaultLogger->log(msg.level, msg.raw.c_str());
-	}
-
-	void DefaultSink::flush()
-	{
-		m_defaultLogger->flush();
-	}
 }

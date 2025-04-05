@@ -2,6 +2,12 @@
 // Copyright(c) 2016-2017 benikabocha.
 // Distributed under the MIT License (http://opensource.org/licenses/MIT)
 //
+
+//
+// Copyright(c) HanetakaChou(YuqiaoZhang).
+// Distributed under the LGPL License (https://opensource.org/license/lgpl-2-1)
+//
+
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "PMXModel.h"
@@ -26,12 +32,37 @@
 #include <iomanip>
 #include <thread>
 #include <mutex>
-#include <condition_variable>
+// #include <condition_variable>
+
+static inline void *_internal_dynamic_link_open(wchar_t const *filename);
+static inline void *_internal_dynamic_link_symbol(void *handle, char const *symbol);
+
+#ifndef NDEBUG
+void *const mcrt_malloc_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/McRT-Malloc");
+void *const libjpeg_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libjpeg");
+void *const libpng_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libpng");
+void *const libwebp_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libwebp");
+void *const libiconv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libiconv");
+void *const opencv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/opencv_world3410");
+void *const asset_import_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/BRX-Asset-Import");
+#else
+void *const mcrt_malloc_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/McRT-Malloc");
+void *const libjpeg_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libjpeg");
+void *const libpng_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libpng");
+void *const libwebp_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libwebp");
+void *const libiconv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libiconv");
+void *const opencv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/opencv_world3410");
+void *const asset_import_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/BRX-Asset-Import");
+#endif
+
+decltype(brx_asset_import_create_file_input_stream_factory) *const asset_import_create_file_input_stream_factory = reinterpret_cast<decltype(brx_asset_import_create_file_input_stream_factory) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_create_file_input_stream_factory"));
+decltype(brx_asset_import_destroy_file_input_stream_factory) *const asset_import_destroy_file_input_stream_factory = reinterpret_cast<decltype(brx_asset_import_destroy_file_input_stream_factory) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_destroy_file_input_stream_factory"));
+decltype(brx_asset_import_create_scene_from_input_stream) *const asset_import_create_scene_from_input_stream = reinterpret_cast<decltype(brx_asset_import_create_scene_from_input_stream) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_create_scene_from_input_stream"));
+decltype(brx_asset_import_destory_scene) *const asset_import_destory_scene = reinterpret_cast<decltype(brx_asset_import_destory_scene) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_destory_scene"));
 
 namespace saba
 {
-	PMXModel::PMXModel()
-		: m_parallelUpdateCount(0)
+	PMXModel::PMXModel() : m_parallelUpdateCount(0)
 	{
 	}
 
@@ -44,251 +75,382 @@ namespace saba
 	{
 		ClearBaseAnimation();
 
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (uint32_t mmd_morph_target_name = 0U; mmd_morph_target_name < BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_COUNT; ++mmd_morph_target_name)
 		{
-			node->SetAnimationTranslate(glm::vec3(0));
-			node->SetAnimationRotate(glm::quat(1, 0, 0, 0));
+			this->m_morph_target_name_weights[mmd_morph_target_name] = 0.0F;
 		}
 
-		BeginAnimation();
-
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (uint32_t mmd_skeleton_joint_name = 0U; mmd_skeleton_joint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_name)
 		{
-			node->UpdateLocalTransform();
+			this->m_skeleton_joint_name_rigid_transforms[mmd_skeleton_joint_name] = brx_asset_import_rigid_transform{{0.0F, 0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 0.0F}};
 		}
 
-		for (auto& morph : (*m_morphMan.GetMorphs()))
+		for (uint32_t mmd_skeleton_joint_constraint_name = 0U; mmd_skeleton_joint_constraint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_constraint_name)
 		{
-			morph->SetWeight(0);
-		}
-
-		for (auto& ikSolver : (*m_ikSolverMan.GetIKSolvers()))
-		{
-			ikSolver->Enable(true);
-		}
-
-		for (const auto& node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
-
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->GetAppendNode() != nullptr)
-			{
-				pmxNode->UpdateAppendTransform();
-				pmxNode->UpdateGlobalTransform();
-			}
-			if (pmxNode->GetIKSolver() != nullptr)
-			{
-				auto ikSolver = pmxNode->GetIKSolver();
-				ikSolver->Solve();
-				pmxNode->UpdateGlobalTransform();
-			}
-		}
-
-		for (const auto& node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
-
-		EndAnimation();
-
-		ResetPhysics();
-	}
-
-	void PMXModel::BeginAnimation()
-	{
-		for (auto& node : (*m_nodeMan.GetNodes()))
-		{
-			node->BeginUpdateTransform();
-		}
-		size_t vtxCount = m_morphPositions.size();
-		for (size_t vtxIdx = 0; vtxIdx < vtxCount; vtxIdx++)
-		{
-			m_morphPositions[vtxIdx] = glm::vec3(0);
-			m_morphUVs[vtxIdx] = glm::vec4(0);
+			this->m_skeleton_joint_constraint_name_switches[mmd_skeleton_joint_constraint_name] = true;
 		}
 	}
 
-	void PMXModel::EndAnimation()
+	void PMXModel::SaveBaseAnimation()
 	{
-		for (auto& node : (*m_nodeMan.GetNodes()))
+		for (uint32_t mmd_morph_target_name = 0U; mmd_morph_target_name < BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_COUNT; ++mmd_morph_target_name)
 		{
-			node->EndUpdateTransform();
+			this->m_saved_morph_target_name_weights[mmd_morph_target_name] = this->m_morph_target_name_weights[mmd_morph_target_name];
+		}
+
+		for (uint32_t mmd_skeleton_joint_name = 0U; mmd_skeleton_joint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_name)
+		{
+			this->m_saved_skeleton_joint_name_rigid_transforms[mmd_skeleton_joint_name] = this->m_skeleton_joint_name_rigid_transforms[mmd_skeleton_joint_name];
+		}
+
+		for (uint32_t mmd_skeleton_joint_constraint_name = 0U; mmd_skeleton_joint_constraint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_constraint_name)
+		{
+			this->m_saved_skeleton_joint_constraint_name_switches[mmd_skeleton_joint_constraint_name] = this->m_skeleton_joint_constraint_name_switches[mmd_skeleton_joint_constraint_name];
+		}
+	}
+
+	void PMXModel::LoadBaseAnimation()
+	{
+		for (uint32_t mmd_morph_target_name = 0U; mmd_morph_target_name < BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_COUNT; ++mmd_morph_target_name)
+		{
+			this->m_morph_target_name_weights[mmd_morph_target_name] = this->m_saved_morph_target_name_weights[mmd_morph_target_name];
+		}
+
+		for (uint32_t mmd_skeleton_joint_name = 0U; mmd_skeleton_joint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_name)
+		{
+			this->m_skeleton_joint_name_rigid_transforms[mmd_skeleton_joint_name] = this->m_saved_skeleton_joint_name_rigid_transforms[mmd_skeleton_joint_name];
+		}
+
+		for (uint32_t mmd_skeleton_joint_constraint_name = 0U; mmd_skeleton_joint_constraint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_constraint_name)
+		{
+			this->m_skeleton_joint_constraint_name_switches[mmd_skeleton_joint_constraint_name] = this->m_saved_skeleton_joint_constraint_name_switches[mmd_skeleton_joint_constraint_name];
+		}
+	}
+
+	void PMXModel::ClearBaseAnimation()
+	{
+		for (uint32_t mmd_morph_target_name = 0U; mmd_morph_target_name < BRX_ASSET_IMPORT_MORPH_TARGET_NAME_MMD_COUNT; ++mmd_morph_target_name)
+		{
+			this->m_saved_morph_target_name_weights[mmd_morph_target_name] = 0.0F;
+		}
+
+		for (uint32_t mmd_skeleton_joint_name = 0U; mmd_skeleton_joint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_name)
+		{
+			this->m_saved_skeleton_joint_name_rigid_transforms[mmd_skeleton_joint_name] = brx_asset_import_rigid_transform{{0.0F, 0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 0.0F}};
+		}
+
+		for (uint32_t mmd_skeleton_joint_constraint_name = 0U; mmd_skeleton_joint_constraint_name < BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME_MMD_COUNT; ++mmd_skeleton_joint_constraint_name)
+		{
+			this->m_saved_skeleton_joint_constraint_name_switches[mmd_skeleton_joint_constraint_name] = true;
 		}
 	}
 
 	void PMXModel::UpdateMorphAnimation()
 	{
-		// Morph の処理
-		BeginMorphMaterial();
-
-		const auto& morphs = (*m_morphMan.GetMorphs());
-		for (size_t i = 0; i < morphs.size(); i++)
+		uint32_t const vertex_count = m_morphPositions.size();
+		for (uint32_t vtxIdx = 0; vtxIdx < vertex_count; ++vtxIdx)
 		{
-			const auto& morph = morphs[i];
-			Morph(morph.get(), morph->GetWeight());
+			m_morphPositions[vtxIdx] = glm::vec3(0);
+			m_morphUVs[vtxIdx] = glm::vec4(0);
 		}
 
-		EndMorphMaterial();
+		constexpr float const INTERNAL_WEIGHT_EPSILON = 1E-6F;
+
+		uint32_t const morph_target_count = this->m_morph_target_names.size();
+		assert(this->m_morph_targets_vertex_positions.size() == morph_target_count);
+		assert(this->m_morph_targets_vertex_uvs.size() == morph_target_count);
+
+		for (uint32_t morph_target_index = 0U; morph_target_index < morph_target_count; ++morph_target_index)
+		{
+			BRX_ASSET_IMPORT_MORPH_TARGET_NAME const morph_target_name = this->m_morph_target_names[morph_target_index];
+
+			float const morph_target_weight = this->m_morph_target_name_weights[morph_target_name];
+
+			if (morph_target_weight > INTERNAL_WEIGHT_EPSILON)
+			{
+				mcrt_vector<glm::vec3> const &morph_target_vertex_positions = this->m_morph_targets_vertex_positions[morph_target_index];
+				mcrt_vector<glm::vec2> const &morph_target_vertex_uvs = this->m_morph_targets_vertex_uvs[morph_target_index];
+				assert(!morph_target_vertex_positions.empty());
+				assert(!morph_target_vertex_uvs.empty());
+
+				// NOTE: "vertex_index" valid
+				// morph targets are arranged at the beginning of the vertices
+
+				uint32_t const vertex_count = morph_target_vertex_positions.size();
+				assert(morph_target_vertex_uvs.size() == vertex_count);
+
+				for (uint32_t vertex_index = 0U; vertex_index < vertex_count; ++vertex_index)
+				{
+					glm::vec3 const morph_target_vertex_position = morph_target_vertex_positions[vertex_index];
+					glm::vec2 const morph_target_vertex_uv = morph_target_vertex_uvs[vertex_index];
+
+					m_morphPositions[vertex_index].x += (morph_target_vertex_position.x * morph_target_weight);
+					m_morphPositions[vertex_index].y += (morph_target_vertex_position.y * morph_target_weight);
+					m_morphPositions[vertex_index].z += (morph_target_vertex_position.z * morph_target_weight);
+
+					m_morphUVs[vertex_index].x += (morph_target_vertex_uv.x * morph_target_weight);
+					m_morphUVs[vertex_index].y += (morph_target_vertex_uv.y * morph_target_weight);
+				}
+			}
+		}
 	}
 
-	void PMXModel::UpdateNodeAnimation(bool afterPhysicsAnim)
+	static inline glm::mat4x4 calculate_transform_model_space(uint32_t const *const in_animation_skeleton_joint_parent_indices, glm::mat4x4 const *const in_animation_skeleton_local_space, uint32_t const in_animation_skeleton_joint_index)
 	{
-		for (auto pmxNode : m_sortedNodes)
-		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
-				continue;
-			}
+		uint32_t current_animation_skeleton_joint_index = in_animation_skeleton_joint_index;
 
-			pmxNode->UpdateLocalTransform();
+		mcrt_vector<uint32_t> ancestors;
+		while (BRX_ASSET_IMPORT_UINT32_INDEX_INVALID != current_animation_skeleton_joint_index)
+		{
+			ancestors.push_back(current_animation_skeleton_joint_index);
+			current_animation_skeleton_joint_index = in_animation_skeleton_joint_parent_indices[current_animation_skeleton_joint_index];
 		}
 
-		for (auto pmxNode : m_sortedNodes)
+		assert(!ancestors.empty());
+		glm::mat4 model_space = in_animation_skeleton_local_space[ancestors.back()];
+		ancestors.pop_back();
+
+		while (!ancestors.empty())
 		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
+			model_space = model_space * in_animation_skeleton_local_space[ancestors.back()];
+			ancestors.pop_back();
+		}
+
+		return model_space;
+	}
+
+	void PMXModel::UpdateNodeAnimation(bool enablePhysics, float elapsed)
+	{
+		assert(this->m_bind_pose_local_space.size() == this->m_bind_pose_inverse_model_space.size());
+		uint32_t const animation_skeleton_joint_count = this->m_bind_pose_local_space.size();
+
+		mcrt_vector<glm::mat4x4> animation_skeleton_bind_pose_local_space(static_cast<size_t>(animation_skeleton_joint_count));
+		for (uint32_t animation_skeleton_joint_index = 0; animation_skeleton_joint_index < animation_skeleton_joint_count; ++animation_skeleton_joint_index)
+		{
+			glm::quat const rotation(this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[3], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[0], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[1], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[2]);
+
+			glm::vec3 const translation(this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[0], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[1], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[2]);
+
+			animation_skeleton_bind_pose_local_space[animation_skeleton_joint_index] = glm::translate(glm::mat4(1), translation) * glm::mat4_cast(rotation);
+		}
+
+		mcrt_vector<glm::mat4x4> animation_skeleton_animation_pose_local_space(static_cast<size_t>(animation_skeleton_joint_count));
+		for (size_t animation_skeleton_joint_index = 0; animation_skeleton_joint_index < animation_skeleton_joint_count; ++animation_skeleton_joint_index)
+		{
+			BRX_ASSET_IMPORT_SKELETON_JOINT_NAME const skeleton_joint_name = this->m_skeleton_joint_names[animation_skeleton_joint_index];
+
+			glm::quat rotation;
+			glm::vec3 translation;
+			if (BRX_ASSET_IMPORT_SKELETON_JOINT_NAME_INVALID != skeleton_joint_name)
 			{
-				continue;
+				// [Normalized Local Rotation](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm_animation-1.0/how_to_transform_human_pose.md)
+				glm::quat const local_rotation(this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_rotation[3], this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_rotation[0], this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_rotation[1], this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_rotation[2]);
+				glm::vec3 const local_translation(this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_translation[0], this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_translation[1], this->m_skeleton_joint_name_rigid_transforms[skeleton_joint_name].m_translation[2]);
+
+				rotation = local_rotation * glm::quat(this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[3], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[0], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[1], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[2]);
+
+				translation = local_translation + glm::vec3(this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[0], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[1], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[2]);
+			}
+			else
+			{
+				rotation = glm::quat(this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[3], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[0], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[1], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_rotation[2]);
+
+				translation = glm::vec3(this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[0], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[1], this->m_bind_pose_local_space[animation_skeleton_joint_index].m_translation[2]);
 			}
 
-			if (pmxNode->GetParent() == nullptr)
+			animation_skeleton_animation_pose_local_space[animation_skeleton_joint_index] = glm::translate(glm::mat4(1), translation) * glm::mat4_cast(rotation);
+		}
+
+		uint32_t const animation_skeleton_joint_constraint_count = this->m_animation_skeleton_joint_constraint_names.size();
+		assert(this->m_animation_skeleton_joint_constraints.size() == animation_skeleton_joint_constraint_count);
+		assert(this->m_animation_skeleton_joint_constraints_storage.size() == animation_skeleton_joint_constraint_count);
+
+		for (uint32_t animation_skeleton_joint_constraint_index = 0U; animation_skeleton_joint_constraint_index < animation_skeleton_joint_constraint_count; ++animation_skeleton_joint_constraint_index)
+		{
+			BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME const animation_skeleton_joint_constraint_name = this->m_animation_skeleton_joint_constraint_names[animation_skeleton_joint_constraint_index];
+
+			brx_asset_import_skeleton_joint_constraint const &animation_skeleton_joint_constraint = this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index];
+
+			if ((BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME_INVALID == animation_skeleton_joint_constraint_name) || this->m_skeleton_joint_constraint_name_switches[animation_skeleton_joint_constraint_name])
 			{
-				pmxNode->UpdateGlobalTransform();
+				if (BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_COPY_TRANSFORM == animation_skeleton_joint_constraint.m_constraint_type)
+				{
+					glm::quat source_rotation_local_space;
+					glm::vec3 source_translation_local_space;
+					{
+						glm::quat source_rotation_bind_pose_local_space;
+						glm::vec3 source_translation_bind_pose_local_space;
+						{
+							glm::mat4x4 source_transform_bind_pose_local_space = animation_skeleton_bind_pose_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_source_joint_index];
+
+							source_translation_bind_pose_local_space = glm::vec3(source_transform_bind_pose_local_space[3]);
+
+							glm::vec3 scale = glm::vec3(
+								glm::length(glm::vec3(source_transform_bind_pose_local_space[0])),
+								glm::length(glm::vec3(source_transform_bind_pose_local_space[1])),
+								glm::length(glm::vec3(source_transform_bind_pose_local_space[2])));
+							assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+							source_rotation_bind_pose_local_space = glm::quat_cast(glm::mat3(
+								glm::vec3(source_transform_bind_pose_local_space[0]) / scale.x,
+								glm::vec3(source_transform_bind_pose_local_space[1]) / scale.y,
+								glm::vec3(source_transform_bind_pose_local_space[2]) / scale.z));
+						}
+
+						glm::quat source_rotation_animation_pose_local_space;
+						glm::vec3 source_translation_animation_pose_local_space;
+						{
+							glm::mat4x4 source_transform_animated_local_space = animation_skeleton_animation_pose_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_source_joint_index];
+
+							source_translation_animation_pose_local_space = glm::vec3(source_transform_animated_local_space[3]);
+
+							glm::vec3 scale = glm::vec3(
+								glm::length(glm::vec3(source_transform_animated_local_space[0])),
+								glm::length(glm::vec3(source_transform_animated_local_space[1])),
+								glm::length(glm::vec3(source_transform_animated_local_space[2])));
+							assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+							source_rotation_animation_pose_local_space = glm::quat_cast(glm::mat3(
+								glm::vec3(source_transform_animated_local_space[0]) / scale.x,
+								glm::vec3(source_transform_animated_local_space[1]) / scale.y,
+								glm::vec3(source_transform_animated_local_space[2]) / scale.z));
+						}
+
+						// bind pose rotation always zero
+						assert(glm::all(glm::epsilonEqual(source_rotation_bind_pose_local_space, glm::quat(1.0F, 0.0F, 0.0F, 0.0F), 1E-6F)));
+						source_rotation_local_space = source_rotation_animation_pose_local_space;
+
+						source_translation_local_space = source_translation_animation_pose_local_space - source_translation_bind_pose_local_space;
+					}
+
+					glm::quat destination_rotation_local_space;
+					glm::vec3 destination_translation_local_space;
+					{
+						glm::mat4x4 destination_transform_local_space = animation_skeleton_animation_pose_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_destination_joint_index];
+
+						destination_translation_local_space = glm::vec3(destination_transform_local_space[3]);
+
+						glm::vec3 scale = glm::vec3(
+							glm::length(glm::vec3(destination_transform_local_space[0])),
+							glm::length(glm::vec3(destination_transform_local_space[1])),
+							glm::length(glm::vec3(destination_transform_local_space[2])));
+						assert(glm::all(glm::epsilonEqual(scale, glm::vec3(1.0F), 1E-3F)));
+
+						destination_rotation_local_space = glm::quat_cast(glm::mat3(
+							glm::vec3(destination_transform_local_space[0]) / scale.x,
+							glm::vec3(destination_transform_local_space[1]) / scale.y,
+							glm::vec3(destination_transform_local_space[2]) / scale.z));
+					}
+
+					if (animation_skeleton_joint_constraint.m_copy_transform.m_copy_rotation)
+					{
+						glm::quat append_rotation = source_rotation_local_space;
+
+						for (uint32_t source_weight_index = 0U; source_weight_index < animation_skeleton_joint_constraint.m_copy_transform.m_source_weight_count; ++source_weight_index)
+						{
+							append_rotation = glm::slerp(glm::quat(1.0F, 0.0F, 0.0F, 0.0F), append_rotation, animation_skeleton_joint_constraint.m_copy_transform.m_source_weights[source_weight_index]);
+						}
+
+						destination_rotation_local_space = (destination_rotation_local_space * append_rotation);
+					}
+
+					if (animation_skeleton_joint_constraint.m_copy_transform.m_copy_translation)
+					{
+						glm::vec3 append_translation = source_translation_local_space;
+
+						for (uint32_t source_weight_index = 0U; source_weight_index < animation_skeleton_joint_constraint.m_copy_transform.m_source_weight_count; ++source_weight_index)
+						{
+							append_translation = append_translation * animation_skeleton_joint_constraint.m_copy_transform.m_source_weights[source_weight_index];
+						}
+
+						destination_translation_local_space = (destination_translation_local_space + append_translation);
+					}
+
+					glm::mat4 destination_transform_local_space = glm::translate(glm::mat4(1), destination_translation_local_space) * glm::mat4_cast(destination_rotation_local_space);
+
+					animation_skeleton_animation_pose_local_space[animation_skeleton_joint_constraint.m_copy_transform.m_destination_joint_index] = destination_transform_local_space;
+				}
+				else
+				{
+					assert(BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_INVERSE_KINEMATICS == animation_skeleton_joint_constraint.m_constraint_type);
+
+					glm::vec3 const target_position_model_space = calculate_transform_model_space(this->m_animation_skeleton_joint_parent_indices.data(), animation_skeleton_animation_pose_local_space.data(), animation_skeleton_joint_constraint.m_inverse_kinematics.m_target_joint_index)[3];
+
+					glm::mat4 const end_effector_transform_local_space = animation_skeleton_animation_pose_local_space[animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_end_effector_index];
+
+					uint32_t const ik_joint_count = animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_joint_count;
+
+					std::vector<glm::mat4x4> ik_joints_local_space(static_cast<size_t>(ik_joint_count));
+					std::vector<glm::mat4x4> ik_joints_model_space(static_cast<size_t>(ik_joint_count));
+
+					// TODO: check parent index consistent
+					// TODO: check ik joint index out of bound
+
+					for (uint32_t ik_joint_index = 0U; ik_joint_index < ik_joint_count; ++ik_joint_index)
+					{
+						uint32_t const ik_joint_animation_skeleton_joint_index = animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_joint_indices[ik_joint_index];
+
+						ik_joints_local_space[ik_joint_index] = animation_skeleton_animation_pose_local_space[ik_joint_animation_skeleton_joint_index];
+
+						ik_joints_model_space[ik_joint_index] = calculate_transform_model_space(this->m_animation_skeleton_joint_parent_indices.data(), animation_skeleton_animation_pose_local_space.data(), ik_joint_animation_skeleton_joint_index);
+					}
+
+					glm::vec3 const two_joints_hinge_joint_axis_local_space(animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[0], animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[1], animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_two_joints_hinge_joint_axis_local_space[2]);
+					float const two_joints_cosine_max_hinge_joint_angle = animation_skeleton_joint_constraint.m_inverse_kinematics.m_cosine_max_ik_two_joints_hinge_joint_angle;
+					float const two_joints_cosine_min_hinge_joint_angle = animation_skeleton_joint_constraint.m_inverse_kinematics.m_cosine_min_ik_two_joints_hinge_joint_angle;
+					MMDIkSolver::Solve(two_joints_hinge_joint_axis_local_space, two_joints_cosine_max_hinge_joint_angle, two_joints_cosine_min_hinge_joint_angle, target_position_model_space, end_effector_transform_local_space, ik_joint_count, ik_joints_local_space.data(), ik_joints_model_space.data());
+
+					for (uint32_t ik_joint_index = 0U; ik_joint_index < ik_joint_count; ++ik_joint_index)
+					{
+						uint32_t const animation_skeleton_joint_index = animation_skeleton_joint_constraint.m_inverse_kinematics.m_ik_joint_indices[ik_joint_index];
+
+						animation_skeleton_animation_pose_local_space[animation_skeleton_joint_index] = ik_joints_local_space[ik_joint_index];
+					}
+				}
 			}
 		}
 
-		for (auto pmxNode : m_sortedNodes)
+		mcrt_vector<glm::mat4x4> animation_skeleton_animation_pose_model_space(static_cast<size_t>(animation_skeleton_joint_count));
+		for (uint32_t current_animation_skeleton_joint_index = 0; current_animation_skeleton_joint_index < static_cast<uint32_t>(animation_skeleton_joint_count); ++current_animation_skeleton_joint_index)
 		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
+			uint32_t const parent_animation_skeleton_joint_index = this->m_animation_skeleton_joint_parent_indices[current_animation_skeleton_joint_index];
+			if (BRX_ASSET_IMPORT_UINT32_INDEX_INVALID != parent_animation_skeleton_joint_index)
 			{
-				continue;
+				assert(parent_animation_skeleton_joint_index < current_animation_skeleton_joint_index);
+				animation_skeleton_animation_pose_model_space[current_animation_skeleton_joint_index] = animation_skeleton_animation_pose_model_space[parent_animation_skeleton_joint_index] * animation_skeleton_animation_pose_local_space[current_animation_skeleton_joint_index];
 			}
-
-			if (pmxNode->GetAppendNode() != nullptr)
+			else
 			{
-				pmxNode->UpdateAppendTransform();
-				pmxNode->UpdateGlobalTransform();
-			}
-			if (pmxNode->GetIKSolver() != nullptr)
-			{
-				auto ikSolver = pmxNode->GetIKSolver();
-				ikSolver->Solve();
-				pmxNode->UpdateGlobalTransform();
+				animation_skeleton_animation_pose_model_space[current_animation_skeleton_joint_index] = animation_skeleton_animation_pose_local_space[current_animation_skeleton_joint_index];
 			}
 		}
 
-		for (auto pmxNode : m_sortedNodes)
+		if (enablePhysics)
 		{
-			if (pmxNode->IsDeformAfterPhysics() != afterPhysicsAnim)
-			{
-				continue;
-			}
+			MMDPhysics *physics = this->GetPhysicsManager()->GetMMDPhysics();
 
-			if (pmxNode->GetParent() == nullptr)
-			{
-				pmxNode->UpdateGlobalTransform();
-			}
+			physics->AnimationToRagdoll(animation_skeleton_animation_pose_model_space.data());
+
+			physics->Update(elapsed);
+
+			// TODO: we do not need to calculate the model space of the joints which are retrived from the physics
+			physics->RagdollToAnimation(animation_skeleton_animation_pose_model_space.data());
+		}
+
+		assert(this->m_transforms.size() == animation_skeleton_joint_count);
+		for (uint32_t animation_skeleton_joint_index = 0; animation_skeleton_joint_index < static_cast<uint32_t>(animation_skeleton_joint_count); ++animation_skeleton_joint_index)
+		{
+			this->m_transforms[animation_skeleton_joint_index] = animation_skeleton_animation_pose_model_space[animation_skeleton_joint_index] * this->m_bind_pose_inverse_model_space[animation_skeleton_joint_index];
 		}
 	}
 
 	void PMXModel::ResetPhysics()
 	{
-		MMDPhysicsManager* physicsMan = GetPhysicsManager();
-		auto physics = physicsMan->GetMMDPhysics();
-
-		if (physics == nullptr)
-		{
-			return;
-		}
-
-		auto rigidbodys = physicsMan->GetRigidBodys();
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->SetActivation(false);
-			rb->ResetTransform();
-		}
-
-		physics->Update(1.0f / 60.0f);
-
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->ReflectGlobalTransform();
-		}
-
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->CalcLocalTransform();
-		}
-
-		for (const auto& node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
-
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->Reset(physics);
-		}
-	}
-
-	void PMXModel::UpdatePhysicsAnimation(float elapsed)
-	{
-		MMDPhysicsManager* physicsMan = GetPhysicsManager();
-		auto physics = physicsMan->GetMMDPhysics();
-
-		if (physics == nullptr)
-		{
-			return;
-		}
-
-		auto rigidbodys = physicsMan->GetRigidBodys();
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->SetActivation(true);
-		}
-
-		physics->Update(elapsed);
-
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->ReflectGlobalTransform();
-		}
-
-		for (auto& rb : (*rigidbodys))
-		{
-			rb->CalcLocalTransform();
-		}
-
-		for (const auto& node : (*m_nodeMan.GetNodes()))
-		{
-			if (node->GetParent() == nullptr)
-			{
-				node->UpdateGlobalTransform();
-			}
-		}
+		assert(false);
 	}
 
 	void PMXModel::Update()
 	{
-		auto& nodes = (*m_nodeMan.GetNodes());
-
-		// スキンメッシュに使用する変形マトリクスを事前計算
-		for (size_t i = 0; i < nodes.size(); i++)
-		{
-			m_transforms[i] = nodes[i]->GetGlobalTransform() * nodes[i]->GetInverseInitTransform();
-		}
-
 		if (m_parallelUpdateCount != m_updateRanges.size())
 		{
 			SetupParallelUpdate();
@@ -302,8 +464,8 @@ namespace saba
 			{
 				m_parallelUpdateFutures[i] = std::async(
 					std::launch::async,
-					[this, rangeIndex]() { this->Update(this->m_updateRanges[rangeIndex]); }
-				);
+					[this, rangeIndex]()
+					{ this->Update(this->m_updateRanges[rangeIndex]); });
 			}
 		}
 
@@ -324,527 +486,276 @@ namespace saba
 		m_parallelUpdateCount = parallelCount;
 	}
 
-	bool PMXModel::Load(const std::string& filepath, const std::string& mmdDataDir)
+	bool PMXModel::Load(const std::string &filepath, const std::string &mmdDataDir)
 	{
 		Destroy();
 
-		PMXFile pmx;
-		if (!ReadPMXFile(&pmx, filepath.c_str()))
+		brx_asset_import_input_stream_factory *const input_stream_factory = asset_import_create_file_input_stream_factory();
+
+		brx_asset_import_scene *const scene = asset_import_create_scene_from_input_stream(input_stream_factory, filepath.c_str());
+
+		assert(1U == scene->get_surface_group_count());
+		brx_asset_import_surface_group const *const surface_group = scene->get_surface_group(0);
+
+		uint32_t const surface_count = surface_group->get_surface_count();
+
+		assert(surface_count >= 1U);
+
+		uint32_t const morph_target_count = surface_group->get_surface(0)->get_morph_target_count();
+
+		uint32_t surface_group_vertex_count = 0U;
+		uint32_t surface_group_morph_target_vertex_count = 0U;
+		uint32_t surface_group_index_count = 0U;
+
+		for (uint32_t surface_index = 0U; surface_index < surface_count; ++surface_index)
 		{
-			return false;
+			brx_asset_import_surface const *const surface = surface_group->get_surface(surface_index);
+
+			surface_group_vertex_count = (surface_group_vertex_count + surface->get_vertex_count());
+
+			if (surface->get_morph_target_count() > 0U)
+			{
+				assert(surface->get_morph_target_count() == morph_target_count);
+				surface_group_morph_target_vertex_count = (surface_group_morph_target_vertex_count + surface->get_vertex_count());
+			}
+
+			surface_group_index_count = (surface_group_index_count + surface->get_index_count());
 		}
 
-		std::string dirPath = PathUtil::GetDirectoryName(filepath);
+		m_positions.reserve(surface_group_vertex_count);
+		m_normals.reserve(surface_group_vertex_count);
+		m_uvs.reserve(surface_group_vertex_count);
+		m_vertexBoneInfos.reserve(surface_group_index_count);
 
-		size_t vertexCount = pmx.m_vertices.size();
-		m_positions.reserve(vertexCount);
-		m_normals.reserve(vertexCount);
-		m_uvs.reserve(vertexCount);
-		m_vertexBoneInfos.reserve(vertexCount);
 		m_bboxMax = glm::vec3(-std::numeric_limits<float>::max());
 		m_bboxMin = glm::vec3(std::numeric_limits<float>::max());
 
-		bool warnSDEF = false;
-		bool infoQDEF = false;
-		for (const auto& v : pmx.m_vertices)
+		this->m_morph_target_names.resize(morph_target_count);
+		this->m_morph_targets_vertex_positions.resize(morph_target_count);
+		this->m_morph_targets_vertex_uvs.resize(morph_target_count);
+
+		for (uint32_t morph_target_index = 0U; morph_target_index < morph_target_count; ++morph_target_index)
 		{
-			glm::vec3 pos = v.m_position * glm::vec3(1, 1, -1);
-			glm::vec3 nor = v.m_normal * glm::vec3(1, 1, -1);
-			glm::vec2 uv = glm::vec2(v.m_uv.x, 1.0f - v.m_uv.y);
-			m_positions.push_back(pos);
-			m_normals.push_back(nor);
-			m_uvs.push_back(uv);
-			VertexBoneInfo vtxBoneInfo;
-			if (PMXVertexWeight::SDEF != v.m_weightType)
-			{
-				vtxBoneInfo.m_boneIndex[0] = v.m_boneIndices[0];
-				vtxBoneInfo.m_boneIndex[1] = v.m_boneIndices[1];
-				vtxBoneInfo.m_boneIndex[2] = v.m_boneIndices[2];
-				vtxBoneInfo.m_boneIndex[3] = v.m_boneIndices[3];
+			this->m_morph_target_names[morph_target_index] = surface_group->get_surface(0)->get_morph_target_name(morph_target_index);
+			this->m_morph_targets_vertex_positions[morph_target_index].reserve(surface_group_morph_target_vertex_count);
+			this->m_morph_targets_vertex_uvs[morph_target_index].reserve(surface_group_morph_target_vertex_count);
+		}
 
-				vtxBoneInfo.m_boneWeight[0] = v.m_boneWeights[0];
-				vtxBoneInfo.m_boneWeight[1] = v.m_boneWeights[1];
-				vtxBoneInfo.m_boneWeight[2] = v.m_boneWeights[2];
-				vtxBoneInfo.m_boneWeight[3] = v.m_boneWeights[3];
-			}
+		m_indexElementSize = 4U;
+		assert(sizeof(uint32_t) == m_indexElementSize);
+		m_indexCount = surface_group_index_count;
+		m_indices.resize(surface_group_index_count * m_indexElementSize);
+		uint32_t *const indices = reinterpret_cast<uint32_t *>(m_indices.data());
 
-			switch (v.m_weightType)
+		m_materials.reserve(surface_count);
+		m_subMeshes.reserve(surface_count);
+
+		uint32_t begin_vertex_index = 0U;
+		uint32_t begin_index_index = 0U;
+		for (uint32_t surface_index = 0U; surface_index < surface_count; ++surface_index)
+		{
+			brx_asset_import_surface const *const surface = surface_group->get_surface(surface_index);
+
+			uint32_t const vertex_count = surface->get_vertex_count();
+
+			for (uint32_t vertex_index = 0U; vertex_index < vertex_count; ++vertex_index)
 			{
-			case PMXVertexWeight::BDEF1:
-				vtxBoneInfo.m_skinningType = SkinningType::Weight1;
-				break;
-			case PMXVertexWeight::BDEF2:
-				vtxBoneInfo.m_skinningType = SkinningType::Weight2;
-				vtxBoneInfo.m_boneWeight[1] = 1.0f - vtxBoneInfo.m_boneWeight[0];
-				break;
-			case PMXVertexWeight::BDEF4:
+				brx_asset_import_vertex_position const *const vertex_position = surface->get_vertex_position(vertex_index);
+				brx_asset_import_vertex_varying const *const vertex_varying = surface->get_vertex_varying(vertex_index);
+				brx_asset_import_vertex_blending const *const vertex_blending = surface->get_vertex_blending(vertex_index);
+
+				glm::vec3 const position(vertex_position->m_position[0], vertex_position->m_position[1], vertex_position->m_position[2]);
+				glm::vec3 const normal(vertex_varying->m_normal[0], vertex_varying->m_normal[1], vertex_varying->m_normal[2]);
+				glm::vec2 const texcoord(vertex_varying->m_texcoord[0], vertex_varying->m_texcoord[1]);
+
+				m_positions.push_back(position);
+				m_normals.push_back(normal);
+				m_uvs.push_back(glm::vec2(texcoord.x, 1.0F - texcoord.y));
+
+				VertexBoneInfo vtxBoneInfo;
 				vtxBoneInfo.m_skinningType = SkinningType::Weight4;
-				break;
-			case PMXVertexWeight::SDEF:
-				if (!warnSDEF)
-				{
-					SABA_WARN("Use SDEF");
-					warnSDEF = true;
-				}
-				vtxBoneInfo.m_skinningType = SkinningType::SDEF;
-				{
-					auto i0 = v.m_boneIndices[0];
-					auto i1 = v.m_boneIndices[1];
-					auto w0 = v.m_boneWeights[0];
-					auto w1 = 1.0f - w0;
+				vtxBoneInfo.m_boneIndex[0] = vertex_blending->m_indices[0];
+				vtxBoneInfo.m_boneIndex[1] = vertex_blending->m_indices[1];
+				vtxBoneInfo.m_boneIndex[2] = vertex_blending->m_indices[2];
+				vtxBoneInfo.m_boneIndex[3] = vertex_blending->m_indices[3];
+				vtxBoneInfo.m_boneWeight[0] = vertex_blending->m_weights[0];
+				vtxBoneInfo.m_boneWeight[1] = vertex_blending->m_weights[1];
+				vtxBoneInfo.m_boneWeight[2] = vertex_blending->m_weights[2];
+				vtxBoneInfo.m_boneWeight[3] = vertex_blending->m_weights[3];
+				m_vertexBoneInfos.push_back(vtxBoneInfo);
 
-					auto center = v.m_sdefC * glm::vec3(1, 1, -1);
-					auto r0 = v.m_sdefR0 * glm::vec3(1, 1, -1);
-					auto r1 = v.m_sdefR1 * glm::vec3(1, 1, -1);
-					auto rw = r0 * w0 + r1 * w1;
-					r0 = center + r0 - rw;
-					r1 = center + r1 - rw;
-					auto cr0 = (center + r0) * 0.5f;
-					auto cr1 = (center + r1) * 0.5f;
-
-					vtxBoneInfo.m_sdef.m_boneIndex[0] = v.m_boneIndices[0];
-					vtxBoneInfo.m_sdef.m_boneIndex[1] = v.m_boneIndices[1];
-					vtxBoneInfo.m_sdef.m_boneWeight = v.m_boneWeights[0];
-					vtxBoneInfo.m_sdef.m_sdefC = center;
-					vtxBoneInfo.m_sdef.m_sdefR0 = cr0;
-					vtxBoneInfo.m_sdef.m_sdefR1 = cr1;
-				}
-				break;
-			case PMXVertexWeight::QDEF:
-				vtxBoneInfo.m_skinningType = SkinningType::DualQuaternion;
-				if (!infoQDEF)
-				{
-					SABA_INFO("Use QDEF");
-					infoQDEF = true;
-				}
-				break;
-			default:
-				vtxBoneInfo.m_skinningType = SkinningType::Weight1;
-				SABA_ERROR("Unknown PMX Vertex Weight Type: {}", (int)v.m_weightType);
-				break;
+				m_bboxMax = glm::max(m_bboxMax, position);
+				m_bboxMin = glm::min(m_bboxMin, position);
 			}
-			m_vertexBoneInfos.push_back(vtxBoneInfo);
 
-			m_bboxMax = glm::max(m_bboxMax, pos);
-			m_bboxMin = glm::min(m_bboxMin, pos);
-		}
-		m_morphPositions.resize(m_positions.size());
-		m_morphUVs.resize(m_positions.size());
-		m_updatePositions.resize(m_positions.size());
-		m_updateNormals.resize(m_normals.size());
-		m_updateUVs.resize(m_uvs.size());
+			assert((surface->get_morph_target_count() == 0U) || (surface->get_morph_target_count() == morph_target_count));
 
-
-		m_indexElementSize = pmx.m_header.m_vertexIndexSize;
-		m_indices.resize(pmx.m_faces.size() * 3 * m_indexElementSize);
-		m_indexCount = pmx.m_faces.size() * 3;
-		switch (m_indexElementSize)
-		{
-		case 1:
-		{
-			int idx = 0;
-			uint8_t* indices = (uint8_t*)m_indices.data();
-			for (const auto& face : pmx.m_faces)
+			if (surface->get_morph_target_count() > 0U)
 			{
-				for (int i = 0; i < 3; i++)
+				for (uint32_t morph_target_index = 0U; morph_target_index < morph_target_count; ++morph_target_index)
 				{
-					auto vi = face.m_vertices[3 - i - 1];
-					indices[idx] = (uint8_t)vi;
-					idx++;
-				}
-			}
-			break;
-		}
-		case 2:
-		{
-			int idx = 0;
-			uint16_t* indices = (uint16_t*)m_indices.data();
-			for (const auto& face : pmx.m_faces)
-			{
-				for (int i = 0; i < 3; i++)
-				{
-					auto vi = face.m_vertices[3 - i - 1];
-					indices[idx] = (uint16_t)vi;
-					idx++;
-				}
-			}
-			break;
-		}
-		case 4:
-		{
-			int idx = 0;
-			uint32_t* indices = (uint32_t*)m_indices.data();
-			for (const auto& face : pmx.m_faces)
-			{
-				for (int i = 0; i < 3; i++)
-				{
-					auto vi = face.m_vertices[3 - i - 1];
-					indices[idx] = (uint32_t)vi;
-					idx++;
-				}
-			}
-			break;
-		}
-		default:
-			SABA_ERROR("Unsupported Index Size: [{}]", m_indexElementSize);
-			return false;
-		}
+					assert(surface->get_morph_target_name(morph_target_index) == this->m_morph_target_names[morph_target_index]);
 
-		std::vector<std::string> texturePaths;
-		texturePaths.reserve(pmx.m_textures.size());
-		for (const auto& pmxTex : pmx.m_textures)
-		{
-			std::string texPath = PathUtil::Combine(dirPath, pmxTex.m_textureName);
-			texturePaths.emplace_back(std::move(texPath));
-		}
+					for (uint32_t vertex_index = 0U; vertex_index < vertex_count; ++vertex_index)
+					{
+						brx_asset_import_vertex_position const *const vertex_position = surface->get_morph_target_vertex_position(morph_target_index, vertex_index);
+						brx_asset_import_vertex_varying const *const vertex_varying = surface->get_morph_target_vertex_varying(morph_target_index, vertex_index);
 
-		// Materialをコピー
-		m_materials.reserve(pmx.m_materials.size());
-		m_subMeshes.reserve(pmx.m_materials.size());
-		uint32_t beginIndex = 0;
-		for (const auto& pmxMat : pmx.m_materials)
-		{
+						glm::vec3 const position(vertex_position->m_position[0], vertex_position->m_position[1], vertex_position->m_position[2]);
+						glm::vec2 const texcoord(vertex_varying->m_texcoord[0], vertex_varying->m_texcoord[1]);
+
+						this->m_morph_targets_vertex_positions[morph_target_index].emplace_back(position);
+						this->m_morph_targets_vertex_uvs[morph_target_index].emplace_back(texcoord);
+					}
+				}
+			}
+
+			uint32_t const index_count = surface->get_index_count();
+
+			for (uint32_t index_index = 0U; index_index < index_count; ++index_index)
+			{
+				uint32_t const vertex_index = surface->get_index(index_index);
+
+				indices[begin_index_index + index_index] = (begin_vertex_index + vertex_index);
+			}
+
+			assert(1U == surface->get_texture_count());
+
+			brx_asset_import_texture_factor const *const texture_factor = surface->get_texture_factor(0);
+
+			bool const is_double_sided = surface->is_double_sided();
+
+			void const *texture_url = surface->get_texture_url(0);
+			assert('f' == reinterpret_cast<uint8_t const *>(texture_url)[0]);
+			assert('i' == reinterpret_cast<uint8_t const *>(texture_url)[1]);
+			assert('l' == reinterpret_cast<uint8_t const *>(texture_url)[2]);
+			assert('e' == reinterpret_cast<uint8_t const *>(texture_url)[3]);
+			assert(':' == reinterpret_cast<uint8_t const *>(texture_url)[4]);
+			assert('/' == reinterpret_cast<uint8_t const *>(texture_url)[5]);
+			assert('/' == reinterpret_cast<uint8_t const *>(texture_url)[6]);
+
 			MMDMaterial mat;
-			mat.m_diffuse = pmxMat.m_diffuse;
-			mat.m_alpha = pmxMat.m_diffuse.a;
-			mat.m_specularPower = pmxMat.m_specularPower;
-			mat.m_specular = pmxMat.m_specular;
-			mat.m_ambient = pmxMat.m_ambient;
+			mat.m_diffuse = glm::vec3(texture_factor->m_rgba[0], texture_factor->m_rgba[1], texture_factor->m_rgba[2]);
+			mat.m_alpha = texture_factor->m_rgba[3];
+			mat.m_specularPower = 1.0F;
+			mat.m_specular = glm::vec3(0.0F, 0.0F, 0.0F);
+			mat.m_ambient = glm::vec3(0.5F, 0.5F, 0.5F);
 			mat.m_spTextureMode = MMDMaterial::SphereTextureMode::None;
-			mat.m_bothFace = !!((uint8_t)pmxMat.m_drawMode & (uint8_t)PMXDrawModeFlags::BothFace);
-			mat.m_edgeFlag = ((uint8_t)pmxMat.m_drawMode & (uint8_t)PMXDrawModeFlags::DrawEdge) == 0 ? 0 : 1;
-			mat.m_groundShadow = !!((uint8_t)pmxMat.m_drawMode & (uint8_t)PMXDrawModeFlags::GroundShadow);
-			mat.m_shadowCaster = !!((uint8_t)pmxMat.m_drawMode & (uint8_t)PMXDrawModeFlags::CastSelfShadow);
-			mat.m_shadowReceiver = !!((uint8_t)pmxMat.m_drawMode & (uint8_t)PMXDrawModeFlags::RecieveSelfShadow);
-			mat.m_edgeSize = pmxMat.m_edgeSize;
-			mat.m_edgeColor = pmxMat.m_edgeColor;
+			mat.m_bothFace = is_double_sided;
+			mat.m_edgeFlag = 0U;
+			mat.m_groundShadow = 1U;
+			mat.m_shadowCaster = 1U;
+			mat.m_shadowReceiver = 1U;
+			mat.m_edgeSize = 0.5F;
+			mat.m_edgeColor = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+			mat.m_texture = PathUtil::Normalize(PathUtil::Combine(PathUtil::GetDirectoryName(filepath), reinterpret_cast<char const *>(reinterpret_cast<uint8_t const *>(texture_url) + 7)));
+			mat.m_toonTexture = PathUtil::Combine(mmdDataDir, "toon3.png");
+			mat.m_spTexture = "";
+			mat.m_spTextureMode = MMDMaterial::SphereTextureMode::None;
 
-			// Texture
-			if (pmxMat.m_textureIndex != -1)
-			{
-				mat.m_texture = PathUtil::Normalize(texturePaths[pmxMat.m_textureIndex]);
-			}
-
-			// ToonTexture
-			if (pmxMat.m_toonMode == PMXToonMode::Common)
-			{
-				if (pmxMat.m_toonTextureIndex != -1)
-				{
-					std::stringstream ss;
-					ss << "toon" << std::setfill('0') << std::setw(2) << (pmxMat.m_toonTextureIndex + 1) << ".bmp";
-					mat.m_toonTexture = PathUtil::Combine(mmdDataDir, ss.str());
-				}
-			}
-			else if (pmxMat.m_toonMode == PMXToonMode::Separate)
-			{
-				if (pmxMat.m_toonTextureIndex != -1)
-				{
-					mat.m_toonTexture = PathUtil::Normalize(texturePaths[pmxMat.m_toonTextureIndex]);
-				}
-			}
-
-			// SpTexture
-			if (pmxMat.m_sphereTextureIndex != -1)
-			{
-				mat.m_spTexture = PathUtil::Normalize(texturePaths[pmxMat.m_sphereTextureIndex]);
-				mat.m_spTextureMode = MMDMaterial::SphereTextureMode::None;
-				if (pmxMat.m_sphereMode == PMXSphereMode::Mul)
-				{
-					mat.m_spTextureMode = MMDMaterial::SphereTextureMode::Mul;
-				}
-				else if (pmxMat.m_sphereMode == PMXSphereMode::Add)
-				{
-					mat.m_spTextureMode = MMDMaterial::SphereTextureMode::Add;
-				}
-				else if (pmxMat.m_sphereMode == PMXSphereMode::SubTexture)
-				{
-					// TODO: SphareTexture が SubTexture の処理
-				}
-			}
-
-			m_materials.emplace_back(std::move(mat));
+			m_materials.push_back(std::move(mat));
 
 			MMDSubMesh subMesh;
-			subMesh.m_beginIndex = beginIndex;
-			subMesh.m_vertexCount = pmxMat.m_numFaceVertices;
+			subMesh.m_beginIndex = begin_index_index;
+			subMesh.m_vertexCount = index_count;
 			subMesh.m_materialID = (int)(m_materials.size() - 1);
 			m_subMeshes.push_back(subMesh);
 
-			beginIndex = beginIndex + pmxMat.m_numFaceVertices;
+			begin_vertex_index = begin_vertex_index + vertex_count;
+			begin_index_index = begin_index_index + index_count;
 		}
+
+		assert(surface_group_vertex_count == m_positions.size());
+		assert(surface_group_vertex_count == m_normals.size());
+		assert(surface_group_vertex_count == m_uvs.size());
+		assert(surface_group_vertex_count == m_vertexBoneInfos.size());
+
+#ifndef NDEBUG
+		for (uint32_t morph_target_index = 0U; morph_target_index < morph_target_count; ++morph_target_index)
+		{
+			assert(this->m_morph_targets_vertex_positions[morph_target_index].size() == surface_group_morph_target_vertex_count);
+			assert(this->m_morph_targets_vertex_uvs[morph_target_index].size() == surface_group_morph_target_vertex_count);
+		}
+#endif
+
 		m_initMaterials = m_materials;
-		m_mulMaterialFactors.resize(m_materials.size());
-		m_addMaterialFactors.resize(m_materials.size());
 
-		// Node
-		m_nodeMan.GetNodes()->reserve(pmx.m_bones.size());
-		for (const auto& bone : pmx.m_bones)
+		uint32_t const animation_skeleton_joint_count = surface_group->get_animation_skeleton_joint_count();
+
+		this->m_skeleton_joint_names.resize(animation_skeleton_joint_count);
+		this->m_animation_skeleton_joint_parent_indices.resize(animation_skeleton_joint_count);
+		this->m_bind_pose_local_space.resize(animation_skeleton_joint_count);
+		this->m_bind_pose_inverse_model_space.resize(animation_skeleton_joint_count);
+
+		mcrt_vector<glm::mat4x4> animation_skeleton_bind_pose_model_space(static_cast<size_t>(animation_skeleton_joint_count));
+
+		for (uint32_t animation_skeleton_joint_index = 0U; animation_skeleton_joint_index < animation_skeleton_joint_count; ++animation_skeleton_joint_index)
 		{
-			auto* node = m_nodeMan.AddNode();
-			node->SetName(bone.m_name);
-		}
-		for (size_t i = 0; i < pmx.m_bones.size(); i++)
-		{
-			int32_t boneIndex = (int32_t)(pmx.m_bones.size() - i - 1);
-			const auto& bone = pmx.m_bones[boneIndex];
-			auto* node = m_nodeMan.GetNode(boneIndex);
+			this->m_skeleton_joint_names[animation_skeleton_joint_index] = surface_group->get_animation_skeleton_joint_name(animation_skeleton_joint_index);
 
-			// Check if the node is looping
-			bool isLooping = false;
-			if (bone.m_parentBoneIndex != -1)
-			{
-				MMDNode* parent = m_nodeMan.GetNode(bone.m_parentBoneIndex);
-				while (parent != nullptr)
-				{
-					if (parent == node)
-					{
-						isLooping = true;
-						SABA_ERROR("This bone hierarchy is a loop: bone={}", boneIndex);
-						break;
-					}
-					parent = parent->GetParent();
-				}
-			}
+			brx_asset_import_rigid_transform const *const animation_skeleton_bind_pose_local_space = surface_group->get_animation_skeleton_joint_transform_bind_pose_local_space(animation_skeleton_joint_index);
 
-			// Check parent node index
-			if (bone.m_parentBoneIndex != -1)
-			{
-				if (bone.m_parentBoneIndex >= boneIndex)
-				{
-					SABA_WARN("The parent index of this node is big: bone={}", boneIndex);
-				}
-			}
+			this->m_bind_pose_local_space[animation_skeleton_joint_index] = (*animation_skeleton_bind_pose_local_space);
 
-			if ((bone.m_parentBoneIndex != -1) && !isLooping)
+			glm::mat4x4 current_bind_pose_local_space_matrix = glm::translate(glm::mat4(1), glm::vec3(animation_skeleton_bind_pose_local_space->m_translation[0], animation_skeleton_bind_pose_local_space->m_translation[1], animation_skeleton_bind_pose_local_space->m_translation[2])) * glm::mat4_cast(glm::quat(animation_skeleton_bind_pose_local_space->m_rotation[3], animation_skeleton_bind_pose_local_space->m_rotation[0], animation_skeleton_bind_pose_local_space->m_rotation[1], animation_skeleton_bind_pose_local_space->m_rotation[2]));
+
+			uint32_t const parent_animation_skeleton_joint_index = surface_group->get_animation_skeleton_joint_parent_index(animation_skeleton_joint_index);
+
+			this->m_animation_skeleton_joint_parent_indices[animation_skeleton_joint_index] = parent_animation_skeleton_joint_index;
+
+			if (BRX_ASSET_IMPORT_UINT32_INDEX_INVALID != parent_animation_skeleton_joint_index)
 			{
-				const auto& parentBone = pmx.m_bones[bone.m_parentBoneIndex];
-				auto* parent = m_nodeMan.GetNode(bone.m_parentBoneIndex);
-				parent->AddChild(node);
-				auto localPos = bone.m_position - parentBone.m_position;
-				localPos.z *= -1;
-				node->SetTranslate(localPos);
+				assert(parent_animation_skeleton_joint_index < animation_skeleton_joint_index);
+
+				animation_skeleton_bind_pose_model_space[animation_skeleton_joint_index] = current_bind_pose_local_space_matrix * animation_skeleton_bind_pose_model_space[parent_animation_skeleton_joint_index];
 			}
 			else
 			{
-				auto localPos = bone.m_position;
-				localPos.z *= -1;
-				node->SetTranslate(localPos);
+				animation_skeleton_bind_pose_model_space[animation_skeleton_joint_index] = current_bind_pose_local_space_matrix;
 			}
-			glm::mat4 init = glm::translate(
-				glm::mat4(1),
-				bone.m_position * glm::vec3(1, 1, -1)
-			);
-			node->SetGlobalTransform(init);
-			node->CalculateInverseInitTransform();
 
-			node->SetDeformDepth(bone.m_deformDepth);
-			bool deformAfterPhysics = !!((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::DeformAfterPhysics);
-			node->EnableDeformAfterPhysics(deformAfterPhysics);
-			bool appendRotate = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendRotate) != 0;
-			bool appendTranslate = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendTranslate) != 0;
-			node->EnableAppendRotate(appendRotate);
-			node->EnableAppendTranslate(appendTranslate);
-			if ((appendRotate || appendTranslate) && (bone.m_appendBoneIndex != -1))
-			{
-				if (bone.m_appendBoneIndex >= boneIndex)
-				{
-					SABA_WARN("The parent(morph assignment) index of this node is big: bone={}", boneIndex);
-				}
-				bool appendLocal = ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::AppendLocal) != 0;
-				auto appendNode = m_nodeMan.GetNode(bone.m_appendBoneIndex);
-				float appendWeight = bone.m_appendWeight;
-				node->EnableAppendLocal(appendLocal);
-				node->SetAppendNode(appendNode);
-				node->SetAppendWeight(appendWeight);
-			}
-			node->SaveInitialTRS();
-		}
-		m_transforms.resize(m_nodeMan.GetNodeCount());
-
-		m_sortedNodes.clear();
-		m_sortedNodes.reserve(m_nodeMan.GetNodeCount());
-		auto* pmxNodes = m_nodeMan.GetNodes();
-		for (auto& pmxNode : (*pmxNodes))
-		{
-			m_sortedNodes.push_back(pmxNode.get());
-		}
-		std::stable_sort(
-			m_sortedNodes.begin(),
-			m_sortedNodes.end(),
-			[](const PMXNode* x, const PMXNode* y) {return x->GetDeformdepth() < y->GetDeformdepth(); }
-		);
-
-		// IK
-		for (size_t i = 0; i < pmx.m_bones.size(); i++)
-		{
-			const auto& bone = pmx.m_bones[i];
-			if ((uint16_t)bone.m_boneFlag & (uint16_t)PMXBoneFlags::IK)
-			{
-				auto solver = m_ikSolverMan.AddIKSolver();
-				auto* ikNode = m_nodeMan.GetNode(i);
-				solver->SetIKNode(ikNode);
-				ikNode->SetIKSolver(solver);
-
-				if ((bone.m_ikTargetBoneIndex < 0) || (bone.m_ikTargetBoneIndex >= (int)m_nodeMan.GetNodeCount()))
-				{
-					SABA_ERROR("Wrong IK Target: bone={} target={}", i, bone.m_ikTargetBoneIndex);
-					continue;
-				}
-
-				auto* targetNode = m_nodeMan.GetNode(bone.m_ikTargetBoneIndex);
-				solver->SetTargetNode(targetNode);
-
-				for (const auto& ikLink : bone.m_ikLinks)
-				{
-					auto* linkNode = m_nodeMan.GetNode(ikLink.m_ikBoneIndex);
-					if (ikLink.m_enableLimit)
-					{
-						glm::vec3 limitMax = ikLink.m_limitMin * glm::vec3(-1);
-						glm::vec3 limitMin = ikLink.m_limitMax * glm::vec3(-1);
-						solver->AddIKChain(linkNode, true, limitMin, limitMax);
-					}
-					else
-					{
-						solver->AddIKChain(linkNode);
-					}
-					linkNode->EnableIK(true);
-				}
-
-				solver->SetIterateCount(bone.m_ikIterationCount);
-				solver->SetLimitAngle(bone.m_ikLimit);
-			}
+			this->m_bind_pose_inverse_model_space[animation_skeleton_joint_index] = glm::inverse(*reinterpret_cast<glm::mat4x4 const *>(&animation_skeleton_bind_pose_model_space[animation_skeleton_joint_index]));
 		}
 
-		// Morph
-		for (const auto& pmxMorph : pmx.m_morphs)
+		uint32_t const animation_skeleton_joint_constraint_count = surface_group->get_animation_skeleton_joint_constraint_count();
+
+		this->m_animation_skeleton_joint_constraint_names.resize(animation_skeleton_joint_constraint_count);
+		this->m_animation_skeleton_joint_constraints.resize(animation_skeleton_joint_constraint_count);
+		this->m_animation_skeleton_joint_constraints_storage.resize(animation_skeleton_joint_constraint_count);
+
+		for (uint32_t animation_skeleton_joint_constraint_index = 0U; animation_skeleton_joint_constraint_index < animation_skeleton_joint_constraint_count; ++animation_skeleton_joint_constraint_index)
 		{
-			auto morph = m_morphMan.AddMorph();
-			morph->SetName(pmxMorph.m_name);
-			morph->SetWeight(0.0f);
-			morph->m_morphType = MorphType::None;
-			if (pmxMorph.m_morphType == PMXMorphType::Position)
-			{
-				morph->m_morphType = MorphType::Position;
-				morph->m_dataIndex = m_positionMorphDatas.size();
-				PositionMorphData morphData;
-				for (const auto& vtx : pmxMorph.m_positionMorph)
-				{
-					PositionMorph morphVtx;
-					morphVtx.m_index = vtx.m_vertexIndex;
-					morphVtx.m_position = vtx.m_position * glm::vec3(1, 1, -1);
-					morphData.m_morphVertices.push_back(morphVtx);
-				}
-				m_positionMorphDatas.emplace_back(std::move(morphData));
-			}
-			else if (pmxMorph.m_morphType == PMXMorphType::UV)
-			{
-				morph->m_morphType = MorphType::UV;
-				morph->m_dataIndex = m_uvMorphDatas.size();
-				UVMorphData morphData;
-				for (const auto& uv : pmxMorph.m_uvMorph)
-				{
-					UVMorph morphUV;
-					morphUV.m_index = uv.m_vertexIndex;
-					morphUV.m_uv = uv.m_uv;
-					morphData.m_morphUVs.push_back(morphUV);
-				}
-				m_uvMorphDatas.emplace_back(std::move(morphData));
-			}
-			else if (pmxMorph.m_morphType == PMXMorphType::Material)
-			{
-				morph->m_morphType = MorphType::Material;
-				morph->m_dataIndex = m_materialMorphDatas.size();
+			this->m_animation_skeleton_joint_constraint_names[animation_skeleton_joint_constraint_index] = surface_group->get_animation_skeleton_joint_constraint_name(animation_skeleton_joint_constraint_index);
+			this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index] = *surface_group->get_animation_skeleton_joint_constraint(animation_skeleton_joint_constraint_index);
 
-				MaterialMorphData materialMorphData;
-				materialMorphData.m_materialMorphs = pmxMorph.m_materialMorph;
-				m_materialMorphDatas.emplace_back(materialMorphData);
-			}
-			else if (pmxMorph.m_morphType == PMXMorphType::Bone)
+			if (BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_COPY_TRANSFORM == this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_constraint_type)
 			{
-				morph->m_morphType = MorphType::Bone;
-				morph->m_dataIndex = m_boneMorphDatas.size();
+				this->m_animation_skeleton_joint_constraints_storage[animation_skeleton_joint_constraint_index].resize(this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_copy_transform.m_source_weight_count);
 
-				BoneMorphData boneMorphData;
-				for (const auto& pmxBoneMorphElem : pmxMorph.m_boneMorph)
-				{
-					BoneMorphElement boneMorphElem;
-					boneMorphElem.m_node = m_nodeMan.GetMMDNode(pmxBoneMorphElem.m_boneIndex);
-					boneMorphElem.m_position = pmxBoneMorphElem.m_position * glm::vec3(1, 1, -1);
-					const glm::quat q = pmxBoneMorphElem.m_quaternion;
-					auto invZ = glm::mat3(glm::scale(glm::mat4(1), glm::vec3(1, 1, -1)));
-					auto rot0 = glm::mat3_cast(q);
-					auto rot1 = invZ * rot0 * invZ;
-					boneMorphElem.m_rotate = glm::quat_cast(rot1);
-					boneMorphData.m_boneMorphs.push_back(boneMorphElem);
-				}
-				m_boneMorphDatas.emplace_back(boneMorphData);
-			}
-			else if (pmxMorph.m_morphType == PMXMorphType::Group)
-			{
-				morph->m_morphType = MorphType::Group;
-				morph->m_dataIndex = m_groupMorphDatas.size();
+				std::memcpy(this->m_animation_skeleton_joint_constraints_storage[animation_skeleton_joint_constraint_index].data(), this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_copy_transform.m_source_weights, sizeof(float) * this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_copy_transform.m_source_weight_count);
 
-				GroupMorphData groupMorphData;
-				groupMorphData.m_groupMorphs = pmxMorph.m_groupMorph;
-				m_groupMorphDatas.emplace_back(groupMorphData);
+				this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_copy_transform.m_source_weights = reinterpret_cast<float *>(this->m_animation_skeleton_joint_constraints_storage[animation_skeleton_joint_constraint_index].data());
 			}
 			else
 			{
-				SABA_WARN("Not Supported Morp Type({}): [{}]",
-					(uint8_t)pmxMorph.m_morphType,
-					pmxMorph.m_name
-				);
+				assert(BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_INVERSE_KINEMATICS == this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_constraint_type);
+
+				this->m_animation_skeleton_joint_constraints_storage[animation_skeleton_joint_constraint_index].resize(this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_inverse_kinematics.m_ik_joint_count);
+
+				std::memcpy(this->m_animation_skeleton_joint_constraints_storage[animation_skeleton_joint_constraint_index].data(), this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_inverse_kinematics.m_ik_joint_indices, sizeof(uint32_t) * this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_inverse_kinematics.m_ik_joint_count);
+
+				this->m_animation_skeleton_joint_constraints[animation_skeleton_joint_constraint_index].m_inverse_kinematics.m_ik_joint_indices = this->m_animation_skeleton_joint_constraints_storage[animation_skeleton_joint_constraint_index].data();
 			}
 		}
 
-		// Check whether Group Morph infinite loop.
-		{
-			std::vector<int32_t> groupMorphStack;
-			std::function<void(int32_t)> fixInifinitGropuMorph;
-			fixInifinitGropuMorph = [this, &fixInifinitGropuMorph, &groupMorphStack](int32_t morphIdx)
-			{
-				const auto& morphs = (*m_morphMan.GetMorphs());
-				const auto& morph = morphs[morphIdx];
+		this->m_transforms.resize(animation_skeleton_joint_count);
 
-				if (morph->m_morphType == MorphType::Group)
-				{
-					auto& groupMorphData = m_groupMorphDatas[morph->m_dataIndex];
-					for (size_t i = 0; i < groupMorphData.m_groupMorphs.size(); i++)
-					{
-						auto& groupMorph = groupMorphData.m_groupMorphs[i];
+		this->m_morphPositions.resize(m_positions.size());
+		this->m_morphUVs.resize(m_positions.size());
 
-						auto findIt = std::find(
-							groupMorphStack.begin(),
-							groupMorphStack.end(),
-							groupMorph.m_morphIndex
-						);
-						if (findIt != groupMorphStack.end())
-						{
-							SABA_WARN("Infinit Group Morph:[{}][{}][{}]",
-								morphIdx, morph->GetName(), i
-							);
-							groupMorph.m_morphIndex = -1;
-						}
-						else
-						{
-							groupMorphStack.push_back(morphIdx);
-							if (groupMorph.m_morphIndex>0)
-								fixInifinitGropuMorph(groupMorph.m_morphIndex);
-							else
-								SABA_ERROR("Invalid morph index: group={}, morph={}", groupMorph.m_morphIndex, morphIdx);
-							groupMorphStack.pop_back();
-						}
-					}
-				}
-			};
-
-			for (int32_t morphIdx = 0; morphIdx < int32_t(m_morphMan.GetMorphCount()); morphIdx++)
-			{
-				fixInifinitGropuMorph(morphIdx);
-				groupMorphStack.clear();
-			}
-
-		}
+		this->m_updatePositions.resize(m_positions.size());
+		this->m_updateNormals.resize(m_normals.size());
+		this->m_updateUVs.resize(m_uvs.size());
 
 		// Physics
 		if (!m_physicsMan.Create())
@@ -853,52 +764,15 @@ namespace saba
 			return false;
 		}
 
-		for (const auto& pmxRB : pmx.m_rigidbodies)
-		{
-			auto rb = m_physicsMan.AddRigidBody();
-			MMDNode* node = nullptr;
-			if (pmxRB.m_boneIndex != -1)
-			{
-				node = m_nodeMan.GetMMDNode(pmxRB.m_boneIndex);
-			}
-			if (!rb->Create(pmxRB, this, node))
-			{
-				SABA_ERROR("Create Rigid Body Fail.\n");
-				return false;
-			}
-			m_physicsMan.GetMMDPhysics()->AddRigidBody(rb);
-		}
+		m_physicsMan.GetMMDPhysics()->InitRagdoll(surface_group);
 
-		for (const auto& pmxJoint : pmx.m_joints)
-		{
-			if (pmxJoint.m_rigidbodyAIndex != -1 &&
-				pmxJoint.m_rigidbodyBIndex != -1 &&
-				pmxJoint.m_rigidbodyAIndex != pmxJoint.m_rigidbodyBIndex)
-			{
-				auto joint = m_physicsMan.AddJoint();
-				MMDNode* node = nullptr;
-				auto rigidBodys = m_physicsMan.GetRigidBodys();
-				bool ret = joint->CreateJoint(
-					pmxJoint,
-					(*rigidBodys)[pmxJoint.m_rigidbodyAIndex].get(),
-					(*rigidBodys)[pmxJoint.m_rigidbodyBIndex].get()
-				);
-				if (!ret)
-				{
-					SABA_ERROR("Create Joint Fail.\n");
-					return false;
-				}
-				m_physicsMan.GetMMDPhysics()->AddJoint(joint);
-			}
-			else
-			{
-				SABA_WARN("Illegal Joint [{}]", pmxJoint.m_name.c_str());
-			}
-		}
-
-		ResetPhysics();
+		this->InitializeAnimation();
 
 		SetupParallelUpdate();
+
+		asset_import_destory_scene(scene);
+
+		asset_import_destroy_file_input_stream_factory(input_stream_factory);
 
 		return true;
 	}
@@ -914,8 +788,6 @@ namespace saba
 		m_vertexBoneInfos.clear();
 
 		m_indices.clear();
-
-		m_nodeMan.GetNodes()->clear();
 
 		m_updateRanges.clear();
 	}
@@ -945,7 +817,7 @@ namespace saba
 			size_t numRanges = (vertexCount + LowerVertexCount - 1) / LowerVertexCount;
 			for (size_t rangeIdx = 0; rangeIdx < m_updateRanges.size(); rangeIdx++)
 			{
-				auto& range = m_updateRanges[rangeIdx];
+				auto &range = m_updateRanges[rangeIdx];
 				if (rangeIdx < numRanges)
 				{
 					range.m_vertexOffset = rangeIdx * LowerVertexCount;
@@ -964,7 +836,7 @@ namespace saba
 			size_t offset = 0;
 			for (size_t rangeIdx = 0; rangeIdx < m_updateRanges.size(); rangeIdx++)
 			{
-				auto& range = m_updateRanges[rangeIdx];
+				auto &range = m_updateRanges[rangeIdx];
 				range.m_vertexOffset = offset;
 				range.m_vertexCount = numVertexCount;
 				if (rangeIdx == 0)
@@ -976,18 +848,18 @@ namespace saba
 		}
 	}
 
-	void PMXModel::Update(const UpdateRange & range)
+	void PMXModel::Update(const UpdateRange &range)
 	{
-		const auto* position = m_positions.data() + range.m_vertexOffset;
-		const auto* normal = m_normals.data() + range.m_vertexOffset;
-		const auto* uv = m_uvs.data() + range.m_vertexOffset;
-		const auto* morphPos = m_morphPositions.data() + range.m_vertexOffset;
-		const auto* morphUV = m_morphUVs.data() + range.m_vertexOffset;
-		const auto* vtxInfo = m_vertexBoneInfos.data() + range.m_vertexOffset;
-		const auto* transforms = m_transforms.data();
-		auto* updatePosition = m_updatePositions.data() + range.m_vertexOffset;
-		auto* updateNormal = m_updateNormals.data() + range.m_vertexOffset;
-		auto* updateUV = m_updateUVs.data() + range.m_vertexOffset;
+		const auto *position = m_positions.data() + range.m_vertexOffset;
+		const auto *normal = m_normals.data() + range.m_vertexOffset;
+		const auto *uv = m_uvs.data() + range.m_vertexOffset;
+		const auto *morphPos = m_morphPositions.data() + range.m_vertexOffset;
+		const auto *morphUV = m_morphUVs.data() + range.m_vertexOffset;
+		const auto *vtxInfo = m_vertexBoneInfos.data() + range.m_vertexOffset;
+		const auto *transforms = m_transforms.data();
+		auto *updatePosition = m_updatePositions.data() + range.m_vertexOffset;
+		auto *updateNormal = m_updateNormals.data() + range.m_vertexOffset;
+		auto *updateUV = m_updateUVs.data() + range.m_vertexOffset;
 
 		for (size_t i = 0; i < range.m_vertexCount; i++)
 		{
@@ -997,7 +869,7 @@ namespace saba
 			case PMXModel::SkinningType::Weight1:
 			{
 				const auto i0 = vtxInfo->m_boneIndex[0];
-				const auto& m0 = transforms[i0];
+				const auto &m0 = transforms[i0];
 				m = m0;
 				break;
 			}
@@ -1007,8 +879,8 @@ namespace saba
 				const auto i1 = vtxInfo->m_boneIndex[1];
 				const auto w0 = vtxInfo->m_boneWeight[0];
 				const auto w1 = vtxInfo->m_boneWeight[1];
-				const auto& m0 = transforms[i0];
-				const auto& m1 = transforms[i1];
+				const auto &m0 = transforms[i0];
+				const auto &m1 = transforms[i1];
 				m = m0 * w0 + m1 * w1;
 				break;
 			}
@@ -1022,36 +894,16 @@ namespace saba
 				const auto w1 = vtxInfo->m_boneWeight[1];
 				const auto w2 = vtxInfo->m_boneWeight[2];
 				const auto w3 = vtxInfo->m_boneWeight[3];
-				const auto& m0 = transforms[i0];
-				const auto& m1 = transforms[i1];
-				const auto& m2 = transforms[i2];
-				const auto& m3 = transforms[i3];
+				const auto &m0 = transforms[i0];
+				const auto &m1 = transforms[i1];
+				const auto &m2 = transforms[i2];
+				const auto &m3 = transforms[i3];
 				m = m0 * w0 + m1 * w1 + m2 * w2 + m3 * w3;
 				break;
 			}
 			case PMXModel::SkinningType::SDEF:
 			{
-				// https://github.com/powroupi/blender_mmd_tools/blob/dev_test/mmd_tools/core/sdef.py
-
-				auto& nodes = (*m_nodeMan.GetNodes());
-				const auto i0 = vtxInfo->m_sdef.m_boneIndex[0];
-				const auto i1 = vtxInfo->m_sdef.m_boneIndex[1];
-				const auto w0 = vtxInfo->m_sdef.m_boneWeight;
-				const auto w1 = 1.0f - w0;
-				const auto center = vtxInfo->m_sdef.m_sdefC;
-				const auto cr0 = vtxInfo->m_sdef.m_sdefR0;
-				const auto cr1 = vtxInfo->m_sdef.m_sdefR1;
-				const auto q0 = glm::quat_cast(nodes[i0]->GetGlobalTransform());
-				const auto q1 = glm::quat_cast(nodes[i1]->GetGlobalTransform());
-				const auto m0 = transforms[i0];
-				const auto m1 = transforms[i1];
-
-				const auto pos = *position + *morphPos;
-				const auto rot_mat = glm::mat3_cast(glm::slerp(q0, q1, w1));
-
-				*updatePosition = glm::mat3(rot_mat) * (pos - center) + glm::vec3(m0 * glm::vec4(cr0, 1)) * w0 + glm::vec3(m1 * glm::vec4(cr1, 1)) * w1;
-				*updateNormal = rot_mat * *normal;
-
+				assert(false);
 				break;
 			}
 			case PMXModel::SkinningType::DualQuaternion:
@@ -1061,12 +913,12 @@ namespace saba
 				// https://www.cs.utah.edu/~ladislav/dq/index.html
 				//
 				glm::dualquat dq[4];
-				float w[4] = { 0 };
+				float w[4] = {0};
 				for (int bi = 0; bi < 4; bi++)
 				{
 					auto boneID = vtxInfo->m_boneIndex[bi];
 					if (boneID != -1)
-					{ 
+					{
 						dq[bi] = glm::dualquat_cast(glm::mat3x4(glm::transpose(transforms[boneID])));
 						dq[bi] = glm::normalize(dq[bi]);
 						w[bi] = vtxInfo->m_boneWeight[bi];
@@ -1076,13 +928,19 @@ namespace saba
 						w[bi] = 0;
 					}
 				}
-				if (glm::dot(dq[0].real, dq[1].real) < 0) { w[1] *= -1.0f; }
-				if (glm::dot(dq[0].real, dq[2].real) < 0) { w[2] *= -1.0f; }
-				if (glm::dot(dq[0].real, dq[3].real) < 0) { w[3] *= -1.0f; }
-				auto blendDQ = w[0] * dq[0]
-					+ w[1] * dq[1]
-					+ w[2] * dq[2]
-					+ w[3] * dq[3];
+				if (glm::dot(dq[0].real, dq[1].real) < 0)
+				{
+					w[1] *= -1.0f;
+				}
+				if (glm::dot(dq[0].real, dq[2].real) < 0)
+				{
+					w[2] *= -1.0f;
+				}
+				if (glm::dot(dq[0].real, dq[3].real) < 0)
+				{
+					w[3] *= -1.0f;
+				}
+				auto blendDQ = w[0] * dq[0] + w[1] * dq[1] + w[2] * dq[2] + w[3] * dq[3];
 				blendDQ = glm::normalize(blendDQ);
 				m = glm::transpose(glm::mat3x4_cast(blendDQ));
 				break;
@@ -1109,358 +967,33 @@ namespace saba
 			morphUV++;
 		}
 	}
-
-	void PMXModel::Morph(PMXMorph* morph, float weight)
-	{
-		switch (morph->m_morphType)
-		{
-		case MorphType::Position:
-			MorphPosition(
-				m_positionMorphDatas[morph->m_dataIndex],
-				weight
-			);
-			break;
-		case MorphType::UV:
-			MorphUV(
-				m_uvMorphDatas[morph->m_dataIndex],
-				weight
-			);
-			break;
-		case MorphType::Material:
-			MorphMaterial(
-				m_materialMorphDatas[morph->m_dataIndex],
-				weight
-			);
-			break;
-		case MorphType::Bone:
-			MorphBone(
-				m_boneMorphDatas[morph->m_dataIndex],
-				weight
-			);
-			break;
-		case MorphType::Group:
-		{
-			auto& groupMorphData = m_groupMorphDatas[morph->m_dataIndex];
-			for (const auto& groupMorph : groupMorphData.m_groupMorphs)
-			{
-				if (groupMorph.m_morphIndex == -1) { continue; }
-				auto& elemMorph = (*m_morphMan.GetMorphs())[groupMorph.m_morphIndex];
-				Morph(elemMorph.get(), groupMorph.m_weight * weight);
-			}
-			break;
-		}
-		default:
-			break;
-		}
-	}
-
-	void PMXModel::MorphPosition(const PositionMorphData & morphData, float weight)
-	{
-		if (weight == 0)
-		{
-			return;
-		}
-
-		for (const auto& morphVtx : morphData.m_morphVertices)
-		{
-			m_morphPositions[morphVtx.m_index] += morphVtx.m_position * weight;
-		}
-	}
-
-	void PMXModel::MorphUV(const UVMorphData & morphData, float weight)
-	{
-		if (weight == 0)
-		{
-			return;
-		}
-
-		for (const auto& morphUV : morphData.m_morphUVs)
-		{
-			m_morphUVs[morphUV.m_index] += morphUV.m_uv * weight;
-		}
-	}
-
-	void PMXModel::BeginMorphMaterial()
-	{
-		MaterialFactor initMul;
-		initMul.m_diffuse = glm::vec3(1);
-		initMul.m_alpha = 1;
-		initMul.m_specular = glm::vec3(1);
-		initMul.m_specularPower = 1;
-		initMul.m_ambient = glm::vec3(1);
-		initMul.m_edgeColor = glm::vec4(1);
-		initMul.m_edgeSize = 1;
-		initMul.m_textureFactor = glm::vec4(1);
-		initMul.m_spTextureFactor = glm::vec4(1);
-		initMul.m_toonTextureFactor = glm::vec4(1);
-
-		MaterialFactor initAdd;
-		initAdd.m_diffuse = glm::vec3(0);
-		initAdd.m_alpha = 0;
-		initAdd.m_specular = glm::vec3(0);
-		initAdd.m_specularPower = 0;
-		initAdd.m_ambient = glm::vec3(0);
-		initAdd.m_edgeColor = glm::vec4(0);
-		initAdd.m_edgeSize = 0;
-		initAdd.m_textureFactor = glm::vec4(0);
-		initAdd.m_spTextureFactor = glm::vec4(0);
-		initAdd.m_toonTextureFactor = glm::vec4(0);
-
-		size_t matCount = m_materials.size();
-		for (size_t matIdx = 0; matIdx < matCount; matIdx++)
-		{
-			m_mulMaterialFactors[matIdx] = initMul;
-			m_mulMaterialFactors[matIdx].m_diffuse = m_initMaterials[matIdx].m_diffuse;
-			m_mulMaterialFactors[matIdx].m_alpha = m_initMaterials[matIdx].m_alpha;
-			m_mulMaterialFactors[matIdx].m_specular = m_initMaterials[matIdx].m_specular;
-			m_mulMaterialFactors[matIdx].m_specularPower = m_initMaterials[matIdx].m_specularPower;
-			m_mulMaterialFactors[matIdx].m_ambient = m_initMaterials[matIdx].m_ambient;
-
-			m_addMaterialFactors[matIdx] = initAdd;
-		}
-	}
-
-	void PMXModel::EndMorphMaterial()
-	{
-		size_t matCount = m_materials.size();
-		for (size_t matIdx = 0; matIdx < matCount; matIdx++)
-		{
-			MaterialFactor matFactor = m_mulMaterialFactors[matIdx];
-			matFactor.Add(m_addMaterialFactors[matIdx], 1.0f);
-
-			m_materials[matIdx].m_diffuse = matFactor.m_diffuse;
-			m_materials[matIdx].m_alpha = matFactor.m_alpha;
-			m_materials[matIdx].m_specular = matFactor.m_specular;
-			m_materials[matIdx].m_specularPower = matFactor.m_specularPower;
-			m_materials[matIdx].m_ambient = matFactor.m_ambient;
-			m_materials[matIdx].m_textureMulFactor = m_mulMaterialFactors[matIdx].m_textureFactor;
-			m_materials[matIdx].m_textureAddFactor = m_addMaterialFactors[matIdx].m_textureFactor;
-			m_materials[matIdx].m_spTextureMulFactor = m_mulMaterialFactors[matIdx].m_spTextureFactor;
-			m_materials[matIdx].m_spTextureAddFactor = m_addMaterialFactors[matIdx].m_spTextureFactor;
-			m_materials[matIdx].m_toonTextureMulFactor = m_mulMaterialFactors[matIdx].m_toonTextureFactor;
-			m_materials[matIdx].m_toonTextureAddFactor = m_addMaterialFactors[matIdx].m_toonTextureFactor;
-		}
-	}
-
-	void PMXModel::MorphMaterial(const MaterialMorphData & morphData, float weight)
-	{
-		for (const auto& matMorph : morphData.m_materialMorphs)
-		{
-			if (matMorph.m_materialIndex != -1)
-			{
-				auto mi = matMorph.m_materialIndex;
-				auto& mat = m_materials[mi];
-				switch (matMorph.m_opType)
-				{
-				case saba::PMXMorph::MaterialMorph::OpType::Mul:
-					m_mulMaterialFactors[mi].Mul(
-						MaterialFactor(matMorph),
-						weight
-					);
-					break;
-				case saba::PMXMorph::MaterialMorph::OpType::Add:
-					m_addMaterialFactors[mi].Add(
-						MaterialFactor(matMorph),
-						weight
-					);
-					break;
-				default:
-					break;
-				}
-			}
-			else
-			{
-				switch (matMorph.m_opType)
-				{
-				case saba::PMXMorph::MaterialMorph::OpType::Mul:
-					for (size_t i = 0; i < m_materials.size(); i++)
-					{
-						m_mulMaterialFactors[i].Mul(
-							MaterialFactor(matMorph),
-							weight
-						);
-					}
-					break;
-				case saba::PMXMorph::MaterialMorph::OpType::Add:
-					for (size_t i = 0; i < m_materials.size(); i++)
-					{
-						m_addMaterialFactors[i].Add(
-							MaterialFactor(matMorph),
-							weight
-						);
-					}
-					break;
-				default:
-					break;
-				}
-			}
-		}
-	}
-
-	void PMXModel::MorphBone(const BoneMorphData & morphData, float weight)
-	{
-		for (auto& boneMorph : morphData.m_boneMorphs)
-		{
-			auto node = boneMorph.m_node;
-			glm::vec3 t = glm::mix(glm::vec3(0), boneMorph.m_position, weight);
-			node->SetTranslate(node->GetTranslate() + t);
-			glm::quat q = glm::slerp(node->GetRotate(), boneMorph.m_rotate, weight);
-			node->SetRotate(q);
-		}
-	}
-
-	PMXNode::PMXNode()
-		: m_deformDepth(-1)
-		, m_isDeformAfterPhysics(false)
-		, m_appendNode(nullptr)
-		, m_isAppendRotate(false)
-		, m_isAppendTranslate(false)
-		, m_isAppendLocal(false)
-		, m_appendWeight(0)
-		, m_ikSolver(nullptr)
-	{
-	}
-
-	void PMXNode::UpdateAppendTransform()
-	{
-		if (m_appendNode == nullptr)
-		{
-			return;
-		}
-
-		if (m_isAppendRotate)
-		{
-			glm::quat appendRotate;
-			if (m_isAppendLocal)
-			{
-				appendRotate = m_appendNode->AnimateRotate();
-			}
-			else
-			{
-				if (m_appendNode->GetAppendNode() != nullptr)
-				{
-					appendRotate = m_appendNode->GetAppendRotate();
-				}
-				else
-				{
-					appendRotate = m_appendNode->AnimateRotate();
-				}
-			}
-
-			if (m_appendNode->m_enableIK)
-			{
-				appendRotate = m_appendNode->GetIKRotate() * appendRotate;
-			}
-
-			glm::quat appendQ = glm::slerp(
-				glm::quat(1, 0, 0, 0),
-				appendRotate,
-				GetAppendWeight()
-			);
-			m_appendRotate = appendQ;
-		}
-
-		if (m_isAppendTranslate)
-		{
-			glm::vec3 appendTranslate(0.0f);
-			if (m_isAppendLocal)
-			{
-				appendTranslate = m_appendNode->GetTranslate() - m_appendNode->GetInitialTranslate();
-			}
-			else
-			{
-				if (m_appendNode->GetAppendNode() != nullptr)
-				{
-					appendTranslate = m_appendNode->GetAppendTranslate();
-				}
-				else
-				{
-					appendTranslate = m_appendNode->GetTranslate() - m_appendNode->GetInitialTranslate();
-				}
-			}
-
-			m_appendTranslate = appendTranslate * GetAppendWeight();
-		}
-
-		UpdateLocalTransform();
-	}
-
-	void PMXNode::OnBeginUpdateTransform()
-	{
-		m_appendTranslate = glm::vec3(0);
-		m_appendRotate = glm::quat(1, 0, 0, 0);
-	}
-
-	void PMXNode::OnEndUpdateTransfrom()
-	{
-	}
-
-	void PMXNode::OnUpdateLocalTransform()
-	{
-		glm::vec3 t = AnimateTranslate();
-		if (m_isAppendTranslate)
-		{
-			t += m_appendTranslate;
-		}
-
-		glm::quat r = AnimateRotate();
-		if (m_enableIK)
-		{
-			r = GetIKRotate() * r;
-		}
-		if (m_isAppendRotate)
-		{
-			r = r * m_appendRotate;
-		}
-
-		glm::vec3 s = GetScale();
-
-		m_local = glm::translate(glm::mat4(1), t)
-			* glm::mat4_cast(r)
-			* glm::scale(glm::mat4(1), s);
-	}
-
-	PMXModel::MaterialFactor::MaterialFactor(const saba::PMXMorph::MaterialMorph & pmxMat)
-	{
-		m_diffuse.r = pmxMat.m_diffuse.r;
-		m_diffuse.g = pmxMat.m_diffuse.g;
-		m_diffuse.b = pmxMat.m_diffuse.b;
-		m_alpha = pmxMat.m_diffuse.a;
-		m_specular = pmxMat.m_specular;
-		m_specularPower = pmxMat.m_specularPower;
-		m_ambient = pmxMat.m_ambient;
-		m_edgeColor = pmxMat.m_edgeColor;
-		m_edgeSize = pmxMat.m_edgeSize;
-		m_textureFactor = pmxMat.m_textureFactor;
-		m_spTextureFactor = pmxMat.m_sphereTextureFactor;
-		m_toonTextureFactor = pmxMat.m_toonTextureFactor;
-	}
-
-	void PMXModel::MaterialFactor::Mul(const MaterialFactor & val, float weight)
-	{
-		m_diffuse = glm::mix(m_diffuse, m_diffuse * val.m_diffuse, weight);
-		m_alpha = glm::mix(m_alpha, m_alpha * val.m_alpha, weight);
-		m_specular = glm::mix(m_specular, m_specular * val.m_specular, weight);
-		m_specularPower = glm::mix(m_specularPower, m_specularPower * val.m_specularPower, weight);
-		m_ambient = glm::mix(m_ambient, m_ambient * val.m_ambient, weight);
-		m_edgeColor = glm::mix(m_edgeColor, m_edgeColor * val.m_edgeColor, weight);
-		m_edgeSize = glm::mix(m_edgeSize, m_edgeSize * val.m_edgeSize, weight);
-		m_textureFactor = glm::mix(m_textureFactor, m_textureFactor * val.m_textureFactor, weight);
-		m_spTextureFactor = glm::mix(m_spTextureFactor, m_spTextureFactor * val.m_spTextureFactor, weight);
-		m_toonTextureFactor = glm::mix(m_toonTextureFactor, m_toonTextureFactor * val.m_toonTextureFactor, weight);
-	}
-
-	void PMXModel::MaterialFactor::Add(const MaterialFactor & val, float weight)
-	{
-		m_diffuse += val.m_diffuse * weight;
-		m_alpha += val.m_alpha * weight;
-		m_specular += val.m_specular * weight;
-		m_specularPower += val.m_specularPower * weight;
-		m_ambient += val.m_ambient * weight;
-		m_edgeColor += val.m_edgeColor * weight;
-		m_edgeSize += val.m_edgeSize * weight;
-		m_textureFactor += val.m_textureFactor * weight;
-		m_spTextureFactor += val.m_spTextureFactor * weight;
-		m_toonTextureFactor += val.m_toonTextureFactor * weight;
-	}
 }
+
+#if defined(__GNUC__)
+#error 1
+#elif defined(_MSC_VER)
+#define WIN32_LEAN_AND_MEAN 1
+#include <Windows.h>
+static inline void *_internal_dynamic_link_open(wchar_t const *filename)
+{
+	HMODULE dynamic_link_handle = GetModuleHandleW(filename);
+	if (NULL == dynamic_link_handle)
+	{
+		assert(ERROR_MOD_NOT_FOUND == GetLastError());
+
+		dynamic_link_handle = LoadLibraryW(filename);
+		if (NULL == dynamic_link_handle)
+		{
+			assert(ERROR_MOD_NOT_FOUND == GetLastError());
+			assert(false);
+		}
+	}
+
+	return dynamic_link_handle;
+}
+
+static inline void *_internal_dynamic_link_symbol(void *handle, char const *symbol)
+{
+	return reinterpret_cast<void *>(GetProcAddress(static_cast<HINSTANCE>(handle), symbol));
+}
+#endif

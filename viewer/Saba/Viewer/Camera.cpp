@@ -25,7 +25,7 @@ namespace saba
 	void Camera::Initialize(const glm::vec3 & center, float radius)
 	{
 		m_target = center;
-		m_eye = center + glm::vec3(0.5f, 0.5f, 1) * radius * 5.0f;
+		m_eye = center + glm::vec3(-0.5F, 0.5F, -1) * radius * 5.0f;
 		m_up = glm::vec3(0, 1, 0);
 		m_radius = radius;
 

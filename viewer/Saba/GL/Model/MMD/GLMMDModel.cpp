@@ -16,12 +16,7 @@
 namespace saba
 {
 	GLMMDModel::GLMMDModel()
-		: m_animTime(0)
-		, m_indexType(0)
-		, m_indexTypeSize(0)
-		, m_enablePhysics(true)
-		, m_enableEdge(true)
-		, m_enableGroundShadow(true)
+		: m_animTime(0), m_indexType(0), m_indexTypeSize(0), m_enablePhysics(true), m_enableEdge(true), m_enableGroundShadow(true)
 	{
 		m_perfInfo.Clear();
 	}
@@ -34,15 +29,14 @@ namespace saba
 	{
 		using TextureManager = std::map<std::string, GLTextureRef>;
 		GLTextureRef CreateMMDTexture(
-			TextureManager& texMan,
-			const std::string& filename,
+			TextureManager &texMan,
+			const std::string &filename,
 			bool genMipmap = true,
-			bool rgba = false
-		)
+			bool rgba = false)
 		{
 			std::string key = filename + ":" +
-				std::to_string(genMipmap) + ":" +
-				std::to_string(rgba);
+							  std::to_string(genMipmap) + ":" +
+							  std::to_string(rgba);
 			auto findIt = texMan.find(key);
 			if (findIt != texMan.end())
 			{
@@ -74,23 +68,23 @@ namespace saba
 		m_norBinder = MakeVertexBinder<glm::vec3>();
 		m_uvBinder = MakeVertexBinder<glm::vec2>();
 
-		const void* iboBuf = mmdModel->GetIndices();
+		const void *iboBuf = mmdModel->GetIndices();
 		size_t indexCount = mmdModel->GetIndexCount();
 		size_t indexElemSize = mmdModel->GetIndexElementSize();
 		switch (indexElemSize)
 		{
 		case 1:
-			m_ibo = CreateIBO((uint8_t*)iboBuf, indexCount, GL_STATIC_DRAW);
+			m_ibo = CreateIBO((uint8_t *)iboBuf, indexCount, GL_STATIC_DRAW);
 			m_indexType = GL_UNSIGNED_BYTE;
 			m_indexTypeSize = 1;
 			break;
 		case 2:
-			m_ibo = CreateIBO((uint16_t*)iboBuf, indexCount, GL_STATIC_DRAW);
+			m_ibo = CreateIBO((uint16_t *)iboBuf, indexCount, GL_STATIC_DRAW);
 			m_indexType = GL_UNSIGNED_SHORT;
 			m_indexTypeSize = 2;
 			break;
 		case 4:
-			m_ibo = CreateIBO((uint32_t*)iboBuf, indexCount, GL_STATIC_DRAW);
+			m_ibo = CreateIBO((uint32_t *)iboBuf, indexCount, GL_STATIC_DRAW);
 			m_indexType = GL_UNSIGNED_INT;
 			m_indexTypeSize = 4;
 			break;
@@ -106,8 +100,8 @@ namespace saba
 		TextureManager texMan;
 		for (size_t matIdx = 0; matIdx < matCount; matIdx++)
 		{
-			auto& dest = m_materials[matIdx];
-			const auto& src = materials[matIdx];
+			auto &dest = m_materials[matIdx];
+			const auto &src = materials[matIdx];
 
 			dest.m_diffuse = src.m_diffuse;
 			dest.m_alpha = src.m_alpha;
@@ -152,8 +146,8 @@ namespace saba
 		m_subMeshes.resize(subMeshCount);
 		for (size_t subMeshIdx = 0; subMeshIdx < subMeshCount; subMeshIdx++)
 		{
-			auto& dest = m_subMeshes[subMeshIdx];
-			const auto& src = subMeshes[subMeshIdx];
+			auto &dest = m_subMeshes[subMeshIdx];
+			const auto &src = subMeshes[subMeshIdx];
 
 			dest.m_beginIndex = src.m_beginIndex;
 			dest.m_vertexCount = src.m_vertexCount;
@@ -175,7 +169,7 @@ namespace saba
 		m_ibo.Destroy();
 	}
 
-	bool GLMMDModel::LoadAnimation(const VMDFile& vmd)
+	bool GLMMDModel::LoadAnimation(const VMDFile &vmd, const char *filename)
 	{
 		if (m_mmdModel == nullptr)
 		{
@@ -193,19 +187,19 @@ namespace saba
 			}
 		}
 
-		if (!m_vmdAnim->Add(vmd))
+		if (!m_vmdAnim->Add(vmd, filename))
 		{
 			m_vmdAnim.reset();
 			return false;
 		}
 
 		// Physicsを同期する
-		m_vmdAnim->SyncPhysics(float(m_animTime * 30.0), 30);
+		m_vmdAnim->SyncPhysics(float(m_animTime * 30), 30);
 
 		return true;
 	}
 
-	void GLMMDModel::LoadPose(const VPDFile & vpd, int frameCount)
+	void GLMMDModel::LoadPose(const VPDFile &vpd, int frameCount)
 	{
 		if (m_mmdModel != nullptr)
 		{
@@ -270,8 +264,8 @@ namespace saba
 			}
 
 		private:
-			double	m_perfTime = 0;
-			double	m_startTime = 0;
+			double m_perfTime = 0;
+			double m_startTime = 0;
 		};
 	}
 	void GLMMDModel::UpdateAnimation(double animTime, double elapsed)
@@ -280,11 +274,6 @@ namespace saba
 		Perf updateMorphAnimPerf;
 		Perf updateNodeAnimPerf;
 		Perf updatePhysicsAnimPerf;
-
-		// Begin animation
-		setupAnimPerf.Start();
-		m_mmdModel->BeginAnimation();
-		setupAnimPerf.Stop();
 
 		// Evaluate VMD aniamtion (update morph and node parameter)
 		setupAnimPerf.Start();
@@ -298,26 +287,10 @@ namespace saba
 
 		// Update node animation (before physics animation)
 		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(false);
-		updateNodeAnimPerf.Stop();;
-
-		if (m_enablePhysics)
-		{
-			// Update physics animation
-			updatePhysicsAnimPerf.Start();
-			m_mmdModel->UpdatePhysicsAnimation((float)elapsed);
-			updatePhysicsAnimPerf.Stop();
-		}
-
-		// Update node animation (after physics animation)
-		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(true);
+		updatePhysicsAnimPerf.Start();
+		m_mmdModel->UpdateNodeAnimation(m_enablePhysics, (float)elapsed);
+		updatePhysicsAnimPerf.Stop();
 		updateNodeAnimPerf.Stop();
-
-		// End animation
-		setupAnimPerf.Start();
-		m_mmdModel->EndAnimation();
-		setupAnimPerf.Stop();
 
 		m_perfInfo.m_setupAnimTime = setupAnimPerf.GetPerfTime();
 		m_perfInfo.m_updateMorphAnimTime = updateMorphAnimPerf.GetPerfTime();
@@ -337,11 +310,6 @@ namespace saba
 		m_mmdModel->SaveBaseAnimation();
 		setupAnimPerf.Stop();
 
-		// Begin animation (initialize node TRS)
-		setupAnimPerf.Start();
-		m_mmdModel->BeginAnimation();
-		setupAnimPerf.Stop();
-
 		// Load animation (load node TRS)
 		setupAnimPerf.Start();
 		m_mmdModel->LoadBaseAnimation();
@@ -354,26 +322,10 @@ namespace saba
 
 		// Update node animation (before physics animation)
 		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(false);
+		updatePhysicsAnimPerf.Start();
+		m_mmdModel->UpdateNodeAnimation(true, (float)elapsed);
+		updatePhysicsAnimPerf.Stop();
 		updateNodeAnimPerf.Stop();
-
-		if (m_enablePhysics)
-		{
-			// Update physics animation
-			updatePhysicsAnimPerf.Start();
-			m_mmdModel->UpdatePhysicsAnimation((float)elapsed);
-			updatePhysicsAnimPerf.Stop();
-		}
-
-		// Update node animation (after physics animation)
-		updateNodeAnimPerf.Start();
-		m_mmdModel->UpdateNodeAnimation(true);
-		updateNodeAnimPerf.Stop();
-
-		// End animation
-		setupAnimPerf.Start();
-		m_mmdModel->EndAnimation();
-		setupAnimPerf.Stop();
 
 		m_perfInfo.m_setupAnimTime = setupAnimPerf.GetPerfTime();
 		m_perfInfo.m_updateMorphAnimTime = updateMorphAnimPerf.GetPerfTime();
@@ -385,16 +337,11 @@ namespace saba
 	{
 		m_mmdModel->SaveBaseAnimation();
 
-		m_mmdModel->BeginAnimation();
-
 		m_mmdModel->LoadBaseAnimation();
 
 		m_mmdModel->UpdateMorphAnimation();
-		m_mmdModel->UpdateNodeAnimation(false);
-		m_mmdModel->UpdatePhysicsAnimation(0.0f);
-		m_mmdModel->UpdateNodeAnimation(true);
 
-		m_mmdModel->EndAnimation();
+		m_mmdModel->UpdateNodeAnimation(true, 0.0f);
 	}
 
 	void GLMMDModel::Update()
@@ -413,7 +360,7 @@ namespace saba
 		size_t matCount = m_mmdModel->GetMaterialCount();
 		for (size_t mi = 0; mi < matCount; mi++)
 		{
-			const auto& mmdMat = m_mmdModel->GetMaterials()[mi];
+			const auto &mmdMat = m_mmdModel->GetMaterials()[mi];
 			m_materials[mi].m_diffuse = mmdMat.m_diffuse;
 			m_materials[mi].m_alpha = mmdMat.m_alpha;
 			m_materials[mi].m_specular = mmdMat.m_specular;
@@ -452,12 +399,7 @@ namespace saba
 
 	double GLMMDModel::PerfInfo::GetUpdateTime() const
 	{
-		return m_setupAnimTime
-			+ m_updateMorphAnimTime
-			+ m_updateNodeAnimTime
-			+ m_updatePhysicsAnimTime
-			+ m_updateModelTime
-			+ m_updateGLBufferTime;
+		return m_setupAnimTime + m_updateMorphAnimTime + m_updateNodeAnimTime + m_updatePhysicsAnimTime + m_updateModelTime + m_updateGLBufferTime;
 	}
 
 }

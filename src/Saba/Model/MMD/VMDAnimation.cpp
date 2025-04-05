@@ -3,184 +3,42 @@
 // Distributed under the MIT License (http://opensource.org/licenses/MIT)
 //
 
+//
+// Copyright(c) HanetakaChou(YuqiaoZhang).
+// Distributed under the LGPL License (https://opensource.org/license/lgpl-2-1)
+//
+
 #include "VMDAnimation.h"
 #include "VMDAnimationCommon.h"
 
-#include <Saba/Base/Log.h>
+static inline void *_internal_dynamic_link_open(wchar_t const *filename);
+static inline void *_internal_dynamic_link_symbol(void *handle, char const *symbol);
 
-#include <algorithm>
-#include <iterator>
-#include <map>
-#include <glm/gtc/matrix_transform.hpp>
+#ifndef NDEBUG
+void *const mcrt_malloc_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/McRT-Malloc");
+void *const libjpeg_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libjpeg");
+void *const libpng_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libpng");
+void *const libwebp_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libwebp");
+void *const libiconv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/libiconv");
+void *const opencv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/opencv_world3410");
+void *const asset_import_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Debug/BRX-Asset-Import");
+#else
+void *const mcrt_malloc_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/McRT-Malloc");
+void *const libjpeg_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libjpeg");
+void *const libpng_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libpng");
+void *const libwebp_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libwebp");
+void *const libiconv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/libiconv");
+void *const opencv_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/opencv_world3410");
+void *const asset_import_dynamic_link_handle = _internal_dynamic_link_open(L"C:/Users/HanetakaChou/Documents/GitHub/Brioche-Asset-Import/build-windows/bin/x64/Release/BRX-Asset-Import");
+#endif
+
+decltype(brx_asset_import_create_file_input_stream_factory) *const asset_import_create_file_input_stream_factory = reinterpret_cast<decltype(brx_asset_import_create_file_input_stream_factory) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_create_file_input_stream_factory"));
+decltype(brx_asset_import_destroy_file_input_stream_factory) *const asset_import_destroy_file_input_stream_factory = reinterpret_cast<decltype(brx_asset_import_destroy_file_input_stream_factory) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_destroy_file_input_stream_factory"));
+decltype(brx_asset_import_create_scene_from_input_stream) *const asset_import_create_scene_from_input_stream = reinterpret_cast<decltype(brx_asset_import_create_scene_from_input_stream) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_create_scene_from_input_stream"));
+decltype(brx_asset_import_destory_scene) *const asset_import_destory_scene = reinterpret_cast<decltype(brx_asset_import_destory_scene) *>(_internal_dynamic_link_symbol(asset_import_dynamic_link_handle, "brx_asset_import_destory_scene"));
 
 namespace saba
 {
-	namespace
-	{
-		void SetVMDBezier(VMDBezier& bezier, const unsigned char* cp)
-		{
-			int x0 = cp[0];
-			int y0 = cp[4];
-			int x1 = cp[8];
-			int y1 = cp[12];
-
-			bezier.m_cp1 = glm::vec2((float)x0 / 127.0f, (float)y0 / 127.0f);
-			bezier.m_cp2 = glm::vec2((float)x1 / 127.0f, (float)y1 / 127.0f);
-		}
-
-		glm::mat3 InvZ(const glm::mat3& m)
-		{
-			const glm::mat3 invZ = glm::scale(glm::mat4(1), glm::vec3(1, 1, -1));
-			return invZ * m * invZ;
-		}
-	} // namespace
-
-	float VMDBezier::EvalX(float t) const
-	{
-		const float t2 = t * t;
-		const float t3 = t2 * t;
-		const float it = 1.0f - t;
-		const float it2 = it * it;
-		const float it3 = it2 * it;
-		const float x[4] = {
-			0,
-			m_cp1.x,
-			m_cp2.x,
-			1,
-		};
-
-		return t3 * x[3] + 3 * t2 * it * x[2] + 3 * t * it2 * x[1] + it3 * x[0];
-	}
-
-	float VMDBezier::EvalY(float t) const
-	{
-		const float t2 = t * t;
-		const float t3 = t2 * t;
-		const float it = 1.0f - t;
-		const float it2 = it * it;
-		const float it3 = it2 * it;
-		const float y[4] = {
-			0,
-			m_cp1.y,
-			m_cp2.y,
-			1,
-		};
-
-		return t3 * y[3] + 3 * t2 * it * y[2] + 3 * t * it2 * y[1] + it3 * y[0];
-	}
-
-	glm::vec2 VMDBezier::Eval(float t) const
-	{
-		return glm::vec2(EvalX(t), EvalY(t));
-	}
-
-	float VMDBezier::FindBezierX(float time) const
-	{
-		const float e = 0.00001f;
-		float start = 0.0f;
-		float stop = 1.0f;
-		float t = 0.5f;
-		float x = EvalX(t);
-		while (std::abs(time - x) > e)
-		{
-			if (time < x)
-			{
-				stop = t;
-			}
-			else
-			{
-				start = t;
-			}
-			t = (stop + start) * 0.5f;
-			x = EvalX(t);
-		}
-
-		return t;
-	}
-
-	VMDNodeController::VMDNodeController()
-		: m_node(nullptr)
-		, m_startKeyIndex(0)
-	{
-	}
-
-	void VMDNodeController::SetNode(MMDNode * node)
-	{
-		m_node = node;
-	}
-
-	void VMDNodeController::Evaluate(float t, float weight)
-	{
-		SABA_ASSERT(m_node != nullptr);
-		if (m_node == nullptr)
-		{
-			return;
-		}
-		if (m_keys.empty())
-		{
-			m_node->SetAnimationTranslate(glm::vec3(0));
-			m_node->SetAnimationRotate(glm::quat(1, 0, 0, 0));
-			return;
-		}
-
-		auto boundIt = FindBoundKey(m_keys, int32_t(t), m_startKeyIndex);
-		glm::vec3 vt;
-		glm::quat q;
-		if (boundIt == std::end(m_keys))
-		{
-			vt = m_keys[m_keys.size() - 1].m_translate;
-			q = m_keys[m_keys.size() - 1].m_rotate;
-		}
-		else
-		{
-			vt = (*boundIt).m_translate;
-			q = (*boundIt).m_rotate;
-			if (boundIt != std::begin(m_keys))
-			{
-				const auto& key0 = *(boundIt - 1);
-				const auto& key1 = *boundIt;
-
-				float timeRange = float(key1.m_time - key0.m_time);
-				float time = (t - float(key0.m_time)) / timeRange;
-				float tx_x = key0.m_txBezier.FindBezierX(time);
-				float ty_x = key0.m_tyBezier.FindBezierX(time);
-				float tz_x = key0.m_tzBezier.FindBezierX(time);
-				float rot_x = key0.m_rotBezier.FindBezierX(time);
-				float tx_y = key0.m_txBezier.EvalY(tx_x);
-				float ty_y = key0.m_tyBezier.EvalY(ty_x);
-				float tz_y = key0.m_tzBezier.EvalY(tz_x);
-				float rot_y = key0.m_rotBezier.EvalY(rot_x);
-
-				vt = glm::mix(key0.m_translate, key1.m_translate, glm::vec3(tx_y, ty_y, tz_y));
-				q = glm::slerp(key0.m_rotate, key1.m_rotate, rot_y);
-
-				m_startKeyIndex = std::distance(m_keys.cbegin(), boundIt);
-			}
-		}
-
-		if (weight == 1.0f)
-		{
-			m_node->SetAnimationRotate(q);
-			m_node->SetAnimationTranslate(vt);
-		}
-		else
-		{
-			auto baseQ = m_node->GetBaseAnimationRotate();
-			auto baseT = m_node->GetBaseAnimationTranslate();
-			m_node->SetAnimationRotate(glm::slerp(baseQ, q, weight));
-			m_node->SetAnimationTranslate(glm::mix(baseT, vt, weight));
-		}
-	}
-
-	void VMDNodeController::SortKeys()
-	{
-		std::sort(
-			std::begin(m_keys),
-			std::end(m_keys),
-			[](const KeyType& a, const KeyType& b) { return a.m_time < b.m_time; }
-		);
-	}
-
 	VMDAnimation::VMDAnimation()
 	{
 	}
@@ -191,155 +49,65 @@ namespace saba
 		return true;
 	}
 
-	bool VMDAnimation::Add(const VMDFile & vmd)
+	bool VMDAnimation::Add(const VMDFile &vmd, const char *filename)
 	{
-		// Node Controller
-		std::map<std::string, NodeControllerPtr> nodeCtrlMap;
-		for (auto& nodeCtrl : m_nodeControllers)
-		{
-			std::string name = nodeCtrl->GetNode()->GetName();
-			nodeCtrlMap.emplace(std::make_pair(name, std::move(nodeCtrl)));
-		}
-		m_nodeControllers.clear();
-		for (const auto& motion : vmd.m_motions)
-		{
-			std::string nodeName = motion.m_boneName.ToUtf8String();
-			auto findIt = nodeCtrlMap.find(nodeName);
-			VMDNodeController* nodeCtrl = nullptr;
-			if (findIt == std::end(nodeCtrlMap))
-			{
-				auto node = m_model->GetNodeManager()->GetMMDNode(nodeName);
-				if (node != nullptr)
-				{
-					auto val = std::make_pair(
-						nodeName,
-						std::make_unique<VMDNodeController>()
-					);
-					nodeCtrl = val.second.get();
-					nodeCtrl->SetNode(node);
-					nodeCtrlMap.emplace(std::move(val));
-				}
-			}
-			else
-			{
-				nodeCtrl = (*findIt).second.get();
-			}
+		brx_asset_import_input_stream_factory *const input_stream_factory = asset_import_create_file_input_stream_factory();
 
-			if (nodeCtrl != nullptr)
+		brx_asset_import_scene *const scene = asset_import_create_scene_from_input_stream(input_stream_factory, filename);
+
+		assert(1U == scene->get_animation_count());
+		brx_asset_import_animation const *const animation = scene->get_animation(0);
+
+		uint32_t const frame_count = animation->get_frame_count();
+
+		uint32_t const weight_channel_count = animation->get_weight_channel_count();
+
+		for (uint32_t weight_channel_index = 0U; weight_channel_index < weight_channel_count; ++weight_channel_index)
+		{
+			this->m_weight_channel_names.push_back(static_cast<BRX_ASSET_IMPORT_MORPH_TARGET_NAME>(animation->get_weight_channel_name(weight_channel_index)));
+		}
+
+		for (uint32_t frame_index = 0U; frame_index < frame_count; ++frame_index)
+		{
+			for (uint32_t weight_channel_index = 0U; weight_channel_index < weight_channel_count; ++weight_channel_index)
 			{
-				VMDNodeAnimationKey key;
-				key.Set(motion);
-				nodeCtrl->AddKey(key);
+				this->m_weights.push_back(animation->get_weight(frame_index, weight_channel_index));
 			}
 		}
-		m_nodeControllers.reserve(nodeCtrlMap.size());
-		for (auto& pair : nodeCtrlMap)
-		{
-			pair.second->SortKeys();
-			m_nodeControllers.emplace_back(std::move(pair.second));
-		}
-		nodeCtrlMap.clear();
 
-		// IK Contoroller
-		std::map<std::string, IKControllerPtr> ikCtrlMap;
-		for (auto& ikCtrl : m_ikControllers)
+		uint32_t const rigid_transform_channel_count = animation->get_rigid_transform_channel_count();
+
+		for (uint32_t rigid_transform_channel_index = 0U; rigid_transform_channel_index < rigid_transform_channel_count; ++rigid_transform_channel_index)
 		{
-			std::string name = ikCtrl->GetIkSolver()->GetName();
-			ikCtrlMap.emplace(std::make_pair(name, std::move(ikCtrl)));
+			this->m_rigid_transform_channel_names.push_back(animation->get_rigid_transform_channel_name(rigid_transform_channel_index));
 		}
-		m_ikControllers.clear();
-		for (const auto& ik : vmd.m_iks)
+
+		for (uint32_t frame_index = 0U; frame_index < frame_count; ++frame_index)
 		{
-			for (const auto& ikInfo : ik.m_ikInfos)
+			for (uint32_t rigid_transform_channel_index = 0U; rigid_transform_channel_index < rigid_transform_channel_count; ++rigid_transform_channel_index)
 			{
-				std::string ikName = ikInfo.m_name.ToUtf8String();
-				auto findIt = ikCtrlMap.find(ikName);
-				VMDIKController* ikCtrl = nullptr;
-				if (findIt == std::end(ikCtrlMap))
-				{
-					auto* ikSolver = m_model->GetIKManager()->GetMMDIKSolver(ikName);
-					if (ikSolver != nullptr)
-					{
-						auto val = std::make_pair(
-							ikName,
-							std::make_unique<VMDIKController>()
-						);
-						ikCtrl = val.second.get();
-						ikCtrl->SetIKSolver(ikSolver);
-						ikCtrlMap.emplace(std::move(val));
-					}
-				}
-				else
-				{
-					ikCtrl = (*findIt).second.get();
-				}
-
-				if (ikCtrl != nullptr)
-				{
-					VMDIKAnimationKey key;
-					key.m_time = int32_t(ik.m_frame);
-					key.m_enable = ikInfo.m_enable != 0;
-					ikCtrl->AddKey(key);
-				}
+				this->m_rigid_transforms.push_back(*animation->get_rigid_transform(frame_index, rigid_transform_channel_index));
 			}
 		}
-		m_ikControllers.reserve(ikCtrlMap.size());
-		for (auto& pair : ikCtrlMap)
-		{
-			pair.second->SortKeys();
-			m_ikControllers.emplace_back(std::move(pair.second));
-		}
-		ikCtrlMap.clear();
 
-		// Morph Controller
-		std::map<std::string, MorphControllerPtr> morphCtrlMap;
-		for (auto& morphCtrl : m_morphControllers)
-		{
-			std::string name = morphCtrl->GetMorph()->GetName();
-			morphCtrlMap.emplace(std::make_pair(name, std::move(morphCtrl)));
-		}
-		m_morphControllers.clear();
-		for (const auto& morph : vmd.m_morphs)
-		{
-			std::string morphName = morph.m_blendShapeName.ToUtf8String();
-			auto findIt = morphCtrlMap.find(morphName);
-			VMDMorphController* morphCtrl = nullptr;
-			if (findIt == std::end(morphCtrlMap))
-			{
-				auto* mmdMorph = m_model->GetMorphManager()->GetMorph(morphName);
-				if (mmdMorph != nullptr)
-				{
-					auto val = std::make_pair(
-						morphName,
-						std::make_unique<VMDMorphController>()
-					);
-					morphCtrl = val.second.get();
-					morphCtrl->SetBlendKeyShape(mmdMorph);
-					morphCtrlMap.emplace(std::move(val));
-				}
-			}
-			else
-			{
-				morphCtrl = (*findIt).second.get();
-			}
+		uint32_t const switch_channel_count = animation->get_switch_channel_count();
 
-			if (morphCtrl != nullptr)
+		for (uint32_t switch_channel_index = 0U; switch_channel_index < switch_channel_count; ++switch_channel_index)
+		{
+			this->m_switch_channel_names.push_back(animation->get_switch_channel_name(switch_channel_index));
+		}
+
+		for (uint32_t frame_index = 0U; frame_index < frame_count; ++frame_index)
+		{
+			for (uint32_t switch_channel_index = 0U; switch_channel_index < switch_channel_count; ++switch_channel_index)
 			{
-				VMDMorphAnimationKey key;
-				key.m_time = int32_t(morph.m_frame);
-				key.m_weight = morph.m_weight;
-				morphCtrl->AddKey(key);
+				this->m_switches.push_back(animation->get_switch(frame_index, switch_channel_index));
 			}
 		}
-		m_morphControllers.reserve(morphCtrlMap.size());
-		for (auto& pair : morphCtrlMap)
-		{
-			pair.second->SortKeys();
-			m_morphControllers.emplace_back(std::move(pair.second));
-		}
-		morphCtrlMap.clear();
 
-		m_maxKeyTime = CalculateMaxKeyTime();
+		asset_import_destory_scene(scene);
+
+		asset_import_destroy_file_input_stream_factory(input_stream_factory);
 
 		return true;
 	}
@@ -347,27 +115,47 @@ namespace saba
 	void VMDAnimation::Destroy()
 	{
 		m_model.reset();
-		m_nodeControllers.clear();
-		m_ikControllers.clear();
-		m_morphControllers.clear();
-		m_maxKeyTime = 0;
 	}
 
-	void VMDAnimation::Evaluate(float t, float weight)
+	void VMDAnimation::Evaluate(float t)
 	{
-		for (auto& nodeCtrl : m_nodeControllers)
-		{
-			nodeCtrl->Evaluate(t, weight);
-		}
+		uint32_t const frame_count = this->get_frame_count();
 
-		for (auto& ikCtrl : m_ikControllers)
+		if (frame_count > 0U)
 		{
-			ikCtrl->Evaluate(t, weight);
-		}
+			uint32_t const frame_index = static_cast<uint32_t>(std::min(std::max(static_cast<int64_t>(0), static_cast<int64_t>(t)), static_cast<int64_t>(frame_count - 1U)));
 
-		for (auto& morphCtrl : m_morphControllers)
+			uint32_t const weight_channel_count = this->m_weight_channel_names.size();
+			for (uint32_t weight_channel_index = 0U; weight_channel_index < weight_channel_count; ++weight_channel_index)
+			{
+				BRX_ASSET_IMPORT_MORPH_TARGET_NAME const morph_target_name = this->m_weight_channel_names[weight_channel_index];
+				float const weight = this->m_weights[weight_channel_count * frame_index + weight_channel_index];
+				this->m_model->set_morph_target_name_weight(morph_target_name, weight);
+			}
+
+			uint32_t const rigid_transform_channel_count = this->m_rigid_transform_channel_names.size();
+			for (uint32_t rigid_transform_channel_index = 0U; rigid_transform_channel_index < rigid_transform_channel_count; ++rigid_transform_channel_index)
+			{
+				BRX_ASSET_IMPORT_SKELETON_JOINT_NAME const skeleton_joint_name = this->m_rigid_transform_channel_names[rigid_transform_channel_index];
+
+				brx_asset_import_rigid_transform const rigid_transform = this->m_rigid_transforms[rigid_transform_channel_count * frame_index + rigid_transform_channel_index];
+
+				this->m_model->set_skeleton_joint_name_rigid_transform(skeleton_joint_name, rigid_transform);
+			}
+
+			uint32_t const switch_channel_count = this->m_switch_channel_names.size();
+			for (uint32_t switch_channel_index = 0U; switch_channel_index < switch_channel_count; ++switch_channel_index)
+			{
+				BRX_ASSET_IMPORT_SKELETON_JOINT_CONSTRAINT_NAME const skeleton_joint_constraint_name = this->m_switch_channel_names[switch_channel_index];
+
+				bool const _switch = this->m_switches[switch_channel_count * frame_index + switch_channel_index];
+
+				this->m_model->set_skeleton_joint_constraint_name_switch(skeleton_joint_constraint_name, _switch);
+			}
+		}
+		else
 		{
-			morphCtrl->Evaluate(t, weight);
+			assert(false);
 		}
 	}
 
@@ -382,202 +170,141 @@ namespace saba
 		m_model->SaveBaseAnimation();
 
 		// Physicsを反映する
-		for (int i = 0; i < frameCount; i++)
-		{
-			m_model->BeginAnimation();
+		Evaluate((float)t);
 
-			Evaluate((float)t, float(1 + i) / float(frameCount));
+		m_model->UpdateMorphAnimation();
 
-			m_model->UpdateMorphAnimation();
-
-			m_model->UpdateNodeAnimation(false);
-
-			m_model->UpdatePhysicsAnimation(1.0f / 30.0f);
-
-			m_model->UpdateNodeAnimation(true);
-
-			m_model->EndAnimation();
-		}
+		// Bullet Physics: set "maxSubSteps" to "120"
+		m_model->UpdateNodeAnimation(true, float(frameCount) / 30.0f);
 	}
 
-	int32_t VMDAnimation::CalculateMaxKeyTime() const
+	uint32_t VMDAnimation::get_frame_count() const
 	{
-		int32_t maxTime = 0;
-		for (const auto& nodeController : m_nodeControllers)
+		if ((!this->m_weight_channel_names.empty()) && (!this->m_rigid_transform_channel_names.empty()) && (!this->m_switch_channel_names.empty()))
 		{
-			const auto& keys = nodeController->GetKeys();
-			if (!keys.empty())
-			{
-				maxTime = std::max(maxTime, keys.rbegin()->m_time);
-			}
+			assert(0U == (this->m_weights.size() % this->m_weight_channel_names.size()));
+			assert(0U == (this->m_rigid_transforms.size() % this->m_rigid_transform_channel_names.size()));
+			assert(0U == (this->m_switches.size() % this->m_switch_channel_names.size()));
+
+			uint32_t const frame_count = this->m_rigid_transforms.size() / this->m_rigid_transform_channel_names.size();
+
+			assert((this->m_weights.size() / this->m_weight_channel_names.size()) == frame_count);
+			assert((this->m_switches.size() / this->m_switch_channel_names.size()) == frame_count);
+
+			return frame_count;
 		}
-
-		for (const auto& ikController : m_ikControllers)
+		else if ((!this->m_weight_channel_names.empty()) && (!this->m_rigid_transform_channel_names.empty()))
 		{
-			const auto& keys = ikController->GetKeys();
-			if (!keys.empty())
-			{
-				maxTime = std::max(maxTime, keys.rbegin()->m_time);
-			}
+			assert(this->m_switch_channel_names.empty());
+			assert(this->m_switches.empty());
+			assert(0U == (this->m_weights.size() % this->m_weight_channel_names.size()));
+			assert(0U == (this->m_rigid_transforms.size() % this->m_rigid_transform_channel_names.size()));
+
+			uint32_t const frame_count = this->m_rigid_transforms.size() / this->m_rigid_transform_channel_names.size();
+
+			assert((this->m_weights.size() / this->m_weight_channel_names.size()) == frame_count);
+
+			return frame_count;
 		}
-
-		for (const auto& morphController : m_morphControllers)
+		else if ((!this->m_weight_channel_names.empty()) && (!this->m_switch_channel_names.empty()))
 		{
-			const auto& keys = morphController->GetKeys();
-			if (!keys.empty())
-			{
-				maxTime = std::max(maxTime, keys.rbegin()->m_time);
-			}
+			assert(this->m_rigid_transform_channel_names.empty());
+			assert(this->m_rigid_transforms.empty());
+			assert(0U == (this->m_weights.size() % this->m_weight_channel_names.size()));
+			assert(0U == (this->m_switches.size() % this->m_switch_channel_names.size()));
+
+			uint32_t const frame_count = this->m_weights.size() / this->m_weight_channel_names.size();
+
+			assert((this->m_switches.size() / this->m_switch_channel_names.size()) == frame_count);
+
+			return frame_count;
 		}
-
-		return maxTime;
-	}
-
-	void VMDNodeAnimationKey::Set(const VMDMotion & motion)
-	{
-		m_time = int32_t(motion.m_frame);
-
-		m_translate = motion.m_translate * glm::vec3(1, 1, -1);
-
-		const glm::quat q = motion.m_quaternion;
-		auto rot0 = glm::mat3_cast(q);
-		auto rot1 = InvZ(rot0);
-		m_rotate = glm::quat_cast(rot1);
-
-		SetVMDBezier(m_txBezier, &motion.m_interpolation[0]);
-		SetVMDBezier(m_tyBezier, &motion.m_interpolation[1]);
-		SetVMDBezier(m_tzBezier, &motion.m_interpolation[2]);
-		SetVMDBezier(m_rotBezier, &motion.m_interpolation[3]);
-	}
-
-	VMDIKController::VMDIKController()
-		: m_ikSolver(nullptr)
-		, m_startKeyIndex(0)
-	{
-	}
-
-	void VMDIKController::SetIKSolver(MMDIkSolver * ikSolver)
-	{
-		m_ikSolver = ikSolver;
-	}
-
-	void VMDIKController::Evaluate(float t, float weight)
-	{
-		if (m_ikSolver == nullptr)
+		else if ((!this->m_rigid_transform_channel_names.empty()) && (!this->m_switch_channel_names.empty()))
 		{
-			return;
+			assert(this->m_weights.empty());
+			assert(0U == (this->m_rigid_transforms.size() % this->m_rigid_transform_channel_names.size()));
+			assert(0U == (this->m_switches.size() % this->m_switch_channel_names.size()));
+
+			uint32_t const frame_count = this->m_rigid_transforms.size() / this->m_rigid_transform_channel_names.size();
+
+			assert((this->m_switches.size() / this->m_switch_channel_names.size()) == frame_count);
+
+			return frame_count;
 		}
-		if (m_keys.empty())
+		else if (!this->m_weight_channel_names.empty())
 		{
-			m_ikSolver->Enable(true);
-			return;
-		}
+			assert(this->m_rigid_transform_channel_names.empty());
+			assert(this->m_rigid_transforms.empty());
+			assert(this->m_switch_channel_names.empty());
+			assert(this->m_switches.empty());
+			assert(0U == (this->m_weights.size() % this->m_rigid_transform_channel_names.size()));
 
-		auto boundIt = FindBoundKey(m_keys, int32_t(t), m_startKeyIndex);
-		bool enable = true;
-		if (boundIt == std::end(m_keys))
+			uint32_t const frame_count = this->m_weights.size() / this->m_rigid_transform_channel_names.size();
+
+			return frame_count;
+		}
+		else if (!this->m_rigid_transform_channel_names.empty())
 		{
-			enable = m_keys.rbegin()->m_enable;
+			assert(this->m_weights.empty());
+			assert(this->m_switch_channel_names.empty());
+			assert(this->m_switches.empty());
+			assert(0U == (this->m_rigid_transforms.size() % this->m_rigid_transform_channel_names.size()));
+
+			uint32_t const frame_count = this->m_rigid_transforms.size() / this->m_rigid_transform_channel_names.size();
+
+			return frame_count;
+		}
+		else if (!this->m_switch_channel_names.empty())
+		{
+			assert(this->m_rigid_transform_channel_names.empty());
+			assert(this->m_rigid_transforms.empty());
+			assert(this->m_switch_channel_names.empty());
+			assert(this->m_switches.empty());
+			assert(0U == (this->m_switches.size() % this->m_switch_channel_names.size()));
+
+			uint32_t const frame_count = (this->m_switches.size() / this->m_switch_channel_names.size());
+
+			return frame_count;
 		}
 		else
 		{
-			enable = m_keys.begin()->m_enable;
-			if (boundIt != std::begin(m_keys))
-			{
-				const auto& key = *(boundIt - 1);
-				enable = key.m_enable;
+			assert(this->m_weight_channel_names.empty());
+			assert(this->m_weights.empty());
+			assert(this->m_rigid_transform_channel_names.empty());
+			assert(this->m_rigid_transforms.empty());
+			assert(this->m_switch_channel_names.empty());
+			assert(this->m_switches.empty());
 
-				m_startKeyIndex = std::distance(m_keys.cbegin(), boundIt);
-			}
+			return 0U;
 		}
-
-		if (weight == 1.0f)
-		{
-			m_ikSolver->Enable(enable);
-		}
-		else
-		{
-			if (weight < 1.0f)
-			{
-				m_ikSolver->Enable(m_ikSolver->GetBaseAnimationEnabled());
-			}
-			else
-			{
-				m_ikSolver->Enable(enable);
-			}
-		}
-	}
-
-	void VMDIKController::SortKeys()
-	{
-		std::sort(
-			std::begin(m_keys),
-			std::end(m_keys),
-			[](const KeyType& a, const KeyType& b) { return a.m_time < b.m_time; }
-		);
-	}
-
-	VMDMorphController::VMDMorphController()
-		: m_morph(nullptr)
-		, m_startKeyIndex(0)
-	{
-	}
-
-	void VMDMorphController::SetBlendKeyShape(MMDMorph* morph)
-	{
-		m_morph = morph;
-	}
-
-	void VMDMorphController::Evaluate(float t, float animWeight)
-	{
-		if (m_morph == nullptr)
-		{
-			return;
-		}
-
-		if (m_keys.empty())
-		{
-			return;
-		}
-
-		float weight;
-		auto boundIt = FindBoundKey(m_keys, int32_t(t), m_startKeyIndex);
-		if (boundIt == std::end(m_keys))
-		{
-			weight = m_keys.rbegin()->m_weight;
-		}
-		else
-		{
-			weight = (*boundIt).m_weight;
-			if (boundIt != std::begin(m_keys))
-			{
-				VMDMorphAnimationKey key0 = *(boundIt - 1);
-				VMDMorphAnimationKey key1 = *boundIt;
-
-				float timeRange = float(key1.m_time - key0.m_time);
-				float time = (t - float(key0.m_time)) / timeRange;
-				weight = (key1.m_weight - key0.m_weight) * time + key0.m_weight;
-
-				m_startKeyIndex = std::distance(m_keys.cbegin(), boundIt);
-			}
-		}
-
-		if (animWeight == 1.0f)
-		{
-			m_morph->SetWeight(weight);
-		}
-		else
-		{
-			m_morph->SetWeight(glm::mix(m_morph->GetBaseAnimationWeight(), weight, animWeight));
-		}
-	}
-
-	void VMDMorphController::SortKeys()
-	{
-		std::sort(
-			std::begin(m_keys),
-			std::end(m_keys),
-			[](const KeyType& a, const KeyType& b) { return a.m_time < b.m_time; }
-		);
 	}
 }
+
+#if defined(__GNUC__)
+#error 1
+#elif defined(_MSC_VER)
+#define WIN32_LEAN_AND_MEAN 1
+#include <Windows.h>
+static inline void *_internal_dynamic_link_open(wchar_t const *filename)
+{
+	HMODULE dynamic_link_handle = GetModuleHandleW(filename);
+	if (NULL == dynamic_link_handle)
+	{
+		assert(ERROR_MOD_NOT_FOUND == GetLastError());
+
+		dynamic_link_handle = LoadLibraryW(filename);
+		if (NULL == dynamic_link_handle)
+		{
+			assert(ERROR_MOD_NOT_FOUND == GetLastError());
+			assert(false);
+		}
+	}
+
+	return dynamic_link_handle;
+}
+
+static inline void *_internal_dynamic_link_symbol(void *handle, char const *symbol)
+{
+	return reinterpret_cast<void *>(GetProcAddress(static_cast<HINSTANCE>(handle), symbol));
+}
+#endif
